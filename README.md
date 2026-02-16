@@ -1,8 +1,11 @@
 <img src="assets/github_logo.webp" aligh = "left">
-
 # Splatera
 
 Локальный менеджер ассетов и компонентов на основе визуальной сетки (Masonry). Структурирует файлы по тегам, а не по директориям.
+
+<img src="assets/ui/interface_mockup.webp" align = "center">
+  <figcaption align = "center"> Прототип Интерфейса </figcaption>
+
 
 ## Функционал
 
