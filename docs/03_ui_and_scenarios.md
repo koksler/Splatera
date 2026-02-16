@@ -13,8 +13,8 @@
 * **Content Area (Рабочая область):**
     * Masonry Grid (Кирпичная раскладка). Адаптивная сетка, смешивающая карточки изображений и текстовые блоки разной высоты.
 
-<img src="assets/ui/interface_mockup.webp" align = "center">
-  <figcaption align = "center"> Прототип Интерфейса </figcaption>
+<img src="/assets/ui/interface_mockup.webp" align = "center">
+<figcaption align = "center"> Прототип Интерфейса </figcaption>
 
 ### 1.2 - Modals (Всплывающие окна)
 
@@ -27,10 +27,12 @@
     * Для картинок: Изображение вписано в экран.
     * Для кода/текста: Окно с нумерацией строк и подсветкой синтаксиса (Syntax Highlighting), с возможностью скролла.
 
-<img src="assets/ui/filter_menu_popup_mockup.webp" align = "center">
+<img src="/assets/ui/filter_menu_popup_mockup.webp" align = "center">
   <figcaption align = "center"> Прототип меню фильтра </figcaption>
+  
+---
 
-<img src="assets/ui/preview_popup_mockup.webp" align = "center">
+<img src="/assets/ui/preview_popup_mockup.webp" align = "center">
   <figcaption align = "center"> Прототип предпросмотра фото </figcaption>
 
 
@@ -49,7 +51,7 @@
     *  Отображение названия файла и даты сохранения.
     *  Появление кнопок действий: "Copy to Clipboard", "Open Folder".
 
-<img src="assets/ui/card_mockup.png" align = "center">
+<img src="/assets/ui/card_mockup.png" align = "center">
   <figcaption align = "center"> Прототип карточки контента </figcaption>
 
 ### 2.2 - Цветовое кодирование
