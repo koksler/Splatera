@@ -36,4 +36,4 @@
 
 | Платформа         | Ядро  | Frontend                      | Backend | DB           |
 | ----------------- | ----- | ----------------------------- | ------- | ------------ |
-| Desktop (Windows) | Tauri | React / Vue.js + Tailwind CSS | Node.js | LowDB (JSON) |
+| Desktop (Windows) | Tauri | React / Vue.js + Tailwind CSS | Rust    | LowDB (JSON) |
