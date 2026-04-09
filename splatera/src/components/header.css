@@ -8,7 +8,7 @@
   position: sticky;
   top: 0;
   z-index: 50;
-  gap: 20px; 
+  gap: 20px;
 }
 
 .splatera-header[data-tauri-drag-region] {
@@ -22,7 +22,6 @@
   -webkit-app-region: no-drag;
 }
 
-/* --- ЛОГИЧЕСКИЕ БЛОКИ --- */
 .header-logo {
   display: flex;
   align-items: center;
@@ -74,23 +73,23 @@
 
 /* Да костыль с !important, я ненавижу css */
 @media (max-width: 1200px) {
-  .sort-popover > .sort-option-btn {
+  .sort-popover>.sort-option-btn {
     padding: 8px 10px 8px 10px !important;
     width: 100% !important;
     border-radius: 9999px !important;
   }
 
-  .sort-popover > .sort-option-btn span {
+  .sort-popover>.sort-option-btn span {
     display: inline !important;
   }
 
-  .settings-popover > .settings-action-btn {
+  .settings-popover>.settings-action-btn {
     padding: 8px 10px 8px 10px !important;
     width: 100% !important;
     border-radius: 9999px !important;
   }
 
-  .settings-popover > .settings-action-btn span {
+  .settings-popover>.settings-action-btn span {
     display: inline !important;
   }
 
@@ -98,15 +97,24 @@
     display: none;
   }
 
-  .action-buttons > div > .splatera-btn.with-text {
-    width: 35px;
-    height: 35px;
-    padding: 0;
-    border-radius: 50%;
-    overflow: hidden;
+  .action-buttons .splatera-btn.with-text:not(.sort-option-btn):not(.settings-action-btn):not(.filter-action-btn) {
+    width: 35px !important;
+    height: 35px !important;
+    min-width: 35px !important;
+    aspect-ratio: 1 / 1 !important;
+    flex: 0 0 35px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    overflow: hidden !important;
+    flex-shrink: 0;
   }
-  .action-buttons > div > .splatera-btn.with-text span {
-    display: none;
+
+  .action-buttons .splatera-btn.with-text:not(.sort-option-btn):not(.settings-action-btn):not(.filter-action-btn) span {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    position: absolute !important;
   }
 }
 
@@ -116,36 +124,52 @@
     grid-template-columns: auto 1fr auto;
     grid-template-rows: auto auto;
     gap: 15px;
-    padding: 15px 20px;
+    padding: 12px 20px;
   }
-  .header-secondary-controls {
-    display: block;
-  }
+
   .header-logo {
     grid-column: 1 / 2;
     grid-row: 1 / 2;
+    align-items: center;
   }
+
+  .header-secondary-controls {
+    grid-column: 2 / 3;
+    grid-row: 1 / 2;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
   .window-controls {
     grid-column: 3 / 4;
     grid-row: 1 / 2;
+    margin-left: 0;
   }
+
   .header-main-controls {
     grid-column: 1 / 4;
     grid-row: 2 / 3;
     width: 100%;
+    gap: 10px;
   }
+
   .search-container {
     max-width: none;
+    flex-grow: 1;
   }
 
   .import-btn {
-    min-width: 35px;
-    height: 35px;
-    padding: 0;
-    border-radius: 50%;
-    overflow: hidden;
+    width: 35px !important;
+    min-width: 35px !important;
+    height: 35px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    overflow: hidden !important;
+    flex-shrink: 0;
   }
+
   .import-btn span {
-    display: none;
+    display: none !important;
   }
 }
