@@ -33,8 +33,8 @@ export default function CardPopup({ title, dateText, tags =[], onCopy, onMaximiz
           )}
         </div>
 
-        <Button icon={Copy} onClick={onCopy} />
-        <Button icon={Maximize} onClick={onMaximize} />
+        <Button icon={Copy} onClick={onCopy} tooltip="Copy" tooltipPosition="bottom" />
+        <Button icon={Maximize} onClick={onMaximize} tooltip="Open Lightbox" tooltipPosition="bottom" />
       </div>
 
     </div>

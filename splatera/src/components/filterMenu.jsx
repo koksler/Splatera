@@ -51,7 +51,6 @@ export default function FilterMenu({
     if (!selectedTags.includes(normalized)) {
       setSelectedTags([...selectedTags, normalized]);
     }
-    setIsOpen(false);
   };
 
   const handleTagKeyDown = (e) => {
