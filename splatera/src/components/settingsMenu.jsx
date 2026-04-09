@@ -16,7 +16,7 @@ import {
 import Button from './button';
 import './settingsMenu.css';
 
-export default function SettingsMenu({ onDbUpdated }) {
+export default function SettingsMenu({ onDbUpdated, viewMode, setViewMode }) {
   const [isOpen, setIsOpen] = useState(false);
 
   const { refs, floatingStyles, context } = useFloating({
@@ -44,27 +44,22 @@ export default function SettingsMenu({ onDbUpdated }) {
   const handleRecalculate = async () => {
     try {
       await invoke('recalculate_db'); 
-      
       window.dispatchEvent(new CustomEvent('reload-library'));
-      
+      window.dispatchEvent(new CustomEvent('show-notification', {
+        detail: { title: 'Database Optimized', desc: 'Library reloaded successfully.' }
+      }));
       setIsOpen(false);
     } catch (error) {
       console.error("Ошибка при пересчете БД:", error);
     }
   };
 
-  const handleRecalculateColors = async () => {
-    const count = await invoke('recalculate_colors');
-    window.dispatchEvent(new CustomEvent('show-notification', {
-      detail: { title: 'Colors Updated', desc: `Recalculated ${count} assets` }
-    }));
-    window.dispatchEvent(new Event('reload-library'));
-  };
+
 
   return (
     <>
       <div ref={refs.setReference} {...getReferenceProps()} style={{ display: 'flex' }}>
-        <Button icon={Settings} className="control-btn" />
+        <Button icon={Settings} className="control-btn" tooltip="Settings" tooltipPosition="bottom" />
       </div>
 
       {isOpen && (
@@ -81,6 +76,18 @@ export default function SettingsMenu({ onDbUpdated }) {
               icon={DatabaseZap} 
               text="Recalculate DB" 
               onClick={handleRecalculate}
+              className="settings-action-btn"
+            />
+
+
+
+            <Button 
+              text={viewMode === 'grid' ? "Switch to Horizontal View" : "Switch to Vertical View"} 
+              onClick={() => {
+                setViewMode(viewMode === 'grid' ? 'horizontal' : 'grid');
+                handleRecalculate();
+                setIsOpen(false);
+              }}
               className="settings-action-btn"
             />
           </div>

@@ -1,15 +1,20 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import './input.css';
+import { Tooltip } from './tooltip';
 
-export default function Input({ 
+const Input = React.forwardRef(({ 
   icon: Icon, 
   selectedTags = [], 
   selectedColors = [], 
   onRemoveTag, 
   onRemoveColor,
+  tooltip,
+  hotkey,
+  tooltipPosition = 'bottom',
   ...props 
-}) {
+}, ref) => {
   const tagsRef = useRef(null);
+  const inputRef = useRef(null);
   const [dynamicPadding, setDynamicPadding] = useState(12);
 
   useEffect(() => {
@@ -28,12 +33,32 @@ export default function Input({
     return () => observer.disconnect();
   }, [selectedTags, selectedColors]);
 
-  return (
-    <div className="splatera-input-wrapper">
-      {/* Контейнер с тегами (абсолютный) */}
+  useEffect(() => {
+    if (!hotkey) return;
+
+    const handleKeyDown = (e) => {
+      if (
+        document.activeElement.tagName === 'INPUT' ||
+        document.activeElement.tagName === 'TEXTAREA' ||
+        document.activeElement.isContentEditable
+      ) {
+        return;
+      }
+
+      if (e.key.toLowerCase() === hotkey.toLowerCase()) {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hotkey]);
+
+
+  const inputContent = (
+    <div className="splatera-input-wrapper" ref={ref}>
       <div className="search-tags-container" ref={tagsRef}>
-        
-        {/* Выбранные цвета */}
         {selectedColors.map((color, idx) => (
           <div 
             key={`color-${idx}`} 
@@ -44,7 +69,6 @@ export default function Input({
           />
         ))}
 
-        {/* Выбранные текстовые теги */}
         {selectedTags.map((tag, idx) => (
           <div key={`tag-${idx}`} className="input-tag-text">
             <span>{tag}</span>
@@ -59,6 +83,7 @@ export default function Input({
       </div>
 
       <input 
+        ref={inputRef}
         className="splatera-input" 
         style={{ paddingLeft: `${dynamicPadding}px` }} 
         {...props} 
@@ -66,4 +91,17 @@ export default function Input({
       {Icon && <Icon size={16} className="input-icon" />}
     </div>
   );
-}
+
+  if (tooltip || hotkey) {
+    return (
+      <Tooltip content={tooltip || 'Search'} hotkey={hotkey} position={tooltipPosition}>
+        {inputContent}
+      </Tooltip>
+    );
+  }
+
+  return inputContent;
+});
+
+Input.displayName = 'Input';
+export default Input;
