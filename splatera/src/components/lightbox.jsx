@@ -27,6 +27,7 @@ export default function Lightbox({ file, onClose }) {
 
   const isCodeOrText = file.kind === 'Code' || file.kind === 'Text';
   const ext = file.name ? file.name.split('.').pop().toUpperCase() : 'IMG';
+  const isVideo = file.kind === 'Video' || ['MP4', 'WEBM', 'MOV'].includes(ext);
 
   useEffect(() => {
     if (isCodeOrText) {
@@ -108,8 +109,8 @@ export default function Lightbox({ file, onClose }) {
     >
       <div className="lightbox-controls">
         <Label text={ext} isActive={true} />
-        <Label text={isCodeOrText ? "Code" : "Image"} isActive={true} />
-        {!isCodeOrText && <Button icon={Copy} onClick={() => invoke('copy_image_to_clipboard', { path: file.path })} />}
+        <Label text={isCodeOrText ? "Code" : isVideo ? "Video" : "Image"} isActive={true} />
+        {!isCodeOrText && !isVideo && <Button icon={Copy} onClick={() => invoke('copy_image_to_clipboard', { path: file.path })} />}
         <Button icon={Minimize2} onClick={onClose} /> 
       </div>
 
@@ -138,6 +139,16 @@ export default function Lightbox({ file, onClose }) {
                 {fullText}
               </SyntaxHighlighter>
             )}
+          </div>
+        ) : isVideo ? (
+          <div className="lightbox-video-wrapper" onClick={(e) => e.stopPropagation()}>
+            <video 
+              src={originalImageUrl} 
+              className="lightbox-video" 
+              controls 
+              autoPlay 
+              loop
+            />
           </div>
         ) : (
           <img 
