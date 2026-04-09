@@ -21,6 +21,6 @@
 
 [Документацию по проекту](https://github.com/koksler/Splatera/tree/master/docs) можно прочитать прям тут, в репозитории. Написана в рамках студенческой разработки, поэтому суховата. 
 
-| Платформа         | Ядро  | Frontend             | Backend | DB           |
-| ----------------- | ----- | -------------------- | ------- | ------------ |
-| Desktop (Windows) | Tauri | React + Tailwind CSS | Rust    | LowDB (JSON) |
+| Платформа         | Ядро  | Frontend | Backend | DB           |
+| ----------------- | ----- | -------- | ------- | ------------ |
+| Desktop (Windows) | Tauri | React    | Rust    | LowDB (JSON) |
