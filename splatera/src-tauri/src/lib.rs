@@ -11,23 +11,25 @@ use image::imageops::FilterType;
 use color_thief::{get_palette, ColorFormat};
 use walkdir::WalkDir;
 use std::env;
-use tauri::Manager;
+use tauri::{Manager, State, AppHandle};
+use std::sync::Mutex;
 
 // ==========================================
 // 1. КОНСТАНТЫ
 // ==========================================
 
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "gif"];
+const VIDEO_EXTENSIONS: &[&str] = &["mp4", "webm", "mov"];
 const TEXT_EXTENSIONS:  &[&str] = &["txt", "md"];
 const CODE_EXTENSIONS:  &[&str] = &["js", "py", "rs", "css", "html", "json"];
-const ALL_EXTENSIONS:   &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "gif", "txt", "md", "js", "py", "rs", "css", "html", "json"];
+const ALL_EXTENSIONS:   &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "gif", "mp4", "webm", "mov", "txt", "md", "js", "py", "rs", "css", "html", "json"];
 
 // ==========================================
 // 2. СТРУКТУРЫ ДАННЫХ
 // ==========================================
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-enum AssetKind { Image, Code, Text, Unknown }
+enum AssetKind { Image, Code, Text, Video, Unknown }
 
 impl AssetKind {
     fn default_tags(&self) -> Vec<String> {
@@ -35,6 +37,7 @@ impl AssetKind {
             AssetKind::Image   => vec!["image".to_string()],
             AssetKind::Text    => vec!["text".to_string()],
             AssetKind::Code    => vec!["code".to_string()],
+            AssetKind::Video   => vec!["video".to_string()],
             AssetKind::Unknown => vec![],
         }
     }
@@ -65,11 +68,21 @@ pub struct Asset {
     is_broken: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct AppConfig {
     library_path: String,
     theme_mode: String,
     thumbnail_size: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LibraryQuery {
+    query: Option<String>,
+    tags: Option<Vec<String>>,
+    color: Option<String>,
+    date: Option<String>,
+    sort: Option<String>,
+    filter_tag: Option<String>, // backwards compatibility / existing tag sidebar
 }
 
 // FIX 1 & 2: Безопасный поиск пути и строгий Portable-маркер
@@ -97,7 +110,16 @@ fn get_config(app: &tauri::AppHandle) -> Result<AppConfig, String> {
 }
 
 // ==========================================
-// 3. БАЗА ДАННЫХ
+// 3. СОСТОЯНИЕ ПРИЛОЖЕНИЯ
+// ==========================================
+
+struct AppState {
+    config: AppConfig,
+    assets: Mutex<Vec<Asset>>,
+}
+
+// ==========================================
+// 4. БАЗА ДАННЫХ
 // ==========================================
 
 fn get_db_path(config: &AppConfig) -> PathBuf {
@@ -143,8 +165,24 @@ fn extract_colors(img: &image::DynamicImage) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn hex_to_rgb(hex: &str) -> Option<(i32, i32, i32)> {
+    let hex = hex.trim_start_matches('#');
+    if hex.len() != 6 { return None; }
+    let r = i32::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = i32::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = i32::from_str_radix(&hex[4..6], 16).ok()?;
+    Some((r, g, b))
+}
+
+fn color_distance(c1: (i32, i32, i32), c2: (i32, i32, i32)) -> f64 {
+    let dr = (c1.0 - c2.0).pow(2);
+    let dg = (c1.1 - c2.1).pow(2);
+    let db = (c1.2 - c2.2).pow(2);
+    ((dr + dg + db) as f64).sqrt()
+}
+
 fn save_thumbnail(img: &image::DynamicImage, asset_id: &str, config: &AppConfig) -> Option<String> {
-    let thumb = img.resize(config.thumbnail_size, config.thumbnail_size, FilterType::Triangle);
+    let thumb = img.resize(config.thumbnail_size, config.thumbnail_size, FilterType::Lanczos3);
     let path = Path::new(&config.library_path)
         .join("thumbnails")
         .join(format!("{}.jpg", asset_id));
@@ -179,6 +217,14 @@ fn process_single_path(path: &Path, config: &AppConfig) -> Result<Asset, String>
             dominant_colors = extract_colors(&img);
             preview_path = save_thumbnail(&img, &asset_id, config);
         }
+    } else if VIDEO_EXTENSIONS.contains(&ext.as_str()) {
+        kind = AssetKind::Video;
+        let (w, h) = get_video_dimensions(path);
+        width = w;
+        height = h;
+        
+        // Try to generate a video thumbnail using ffmpeg
+        preview_path = generate_video_thumbnail(path, &asset_id, config);
     } else if TEXT_EXTENSIONS.contains(&ext.as_str()) {
         kind = AssetKind::Text;
         content_snippet = read_text_snippet(path);
@@ -209,14 +255,35 @@ fn process_single_path(path: &Path, config: &AppConfig) -> Result<Asset, String>
     })
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SimplifiedAsset {
+    id: String,
+    original_path: String,
+    preview_path: Option<String>,
+    kind: AssetKind,
+    tags: Vec<String>,
+    file_name: String,
+    width: u32,
+    height: u32,
+    created_at: u64,
+    last_modified_os: u64,
+    content_snippet: Option<String>,
+    is_broken: bool,
+}
+
 // ==========================================
 // 5. КОМАНДЫ TAURI
 // ==========================================
 
 #[tauri::command]
-async fn process_asset(app: tauri::AppHandle, path: String) -> Result<Vec<Asset>, String> {
-    let config = get_config(&app)?;
-    tokio::task::spawn_blocking(move || {
+async fn process_asset(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path: String
+) -> Result<Vec<SimplifiedAsset>, String> {
+    let config = state.config.clone();
+    
+    let unique = tokio::task::spawn_blocking(move || {
         let root = Path::new(&path);
 
         let paths: Vec<PathBuf> = if root.is_dir() {
@@ -236,35 +303,63 @@ async fn process_asset(app: tauri::AppHandle, path: String) -> Result<Vec<Asset>
             .filter_map(|p| process_single_path(&p, &config).ok())
             .collect();
 
-        let mut all_assets = read_db(&config)?;
-        let existing: std::collections::HashSet<String> =
-            all_assets.iter().map(|a| a.original_path.clone()).collect();
-
-        let unique: Vec<Asset> = new_assets.into_iter()
-            .filter(|a| !existing.contains(&a.original_path))
-            .collect();
-
-        if !unique.is_empty() {
-            all_assets.extend(unique.clone());
-            write_db(&all_assets, &config)?;
-        }
-
-        Ok(unique)
+        Ok::<Vec<Asset>, String>(new_assets)
     })
     .await
-    .unwrap_or_else(|e| Err(format!("Task panicked: {}", e)))
+    .unwrap_or_else(|e| Err(format!("Task panicked: {}", e)))?;
+
+    let mut assets = state.assets.lock().map_err(|e| e.to_string())?;
+    let existing: std::collections::HashSet<String> =
+        assets.iter().map(|a| a.original_path.clone()).collect();
+
+    let unique_filtered: Vec<Asset> = unique.into_iter()
+        .filter(|a| !existing.contains(&a.original_path))
+        .collect();
+
+    if !unique_filtered.is_empty() {
+        assets.extend(unique_filtered.clone());
+        write_db(&assets, &state.config)?;
+    }
+
+    Ok(unique_filtered.into_iter().map(|a| SimplifiedAsset {
+        id: a.id,
+        original_path: a.original_path,
+        preview_path: a.preview_path,
+        kind: a.kind,
+        tags: a.tags,
+        file_name: a.metadata.file_name,
+        width: a.width,
+        height: a.height,
+        created_at: a.created_at,
+        last_modified_os: a.metadata.last_modified_os,
+        content_snippet: a.content_snippet.as_ref().map(|s| s.lines().take(5).collect::<Vec<_>>().join("\n")),
+        is_broken: a.is_broken,
+    }).collect())
 }
 
 #[tauri::command]
-fn get_library(app: tauri::AppHandle, filter_tag: Option<String>) -> Result<Vec<Asset>, String> {
-    let config = get_config(&app)?;
-    let mut assets = read_db(&config)?;
+fn get_library(
+    state: State<'_, AppState>,
+    query: LibraryQuery,
+) -> Result<Vec<SimplifiedAsset>, String> {
+    let assets_lock = state.assets.lock().map_err(|e| e.to_string())?;
+    let mut assets = assets_lock.clone();
+    drop(assets_lock); 
 
+    let lib_path = Path::new(&state.config.library_path);
+
+    // Normalize all relative paths to absolute for the frontend protocol
     for asset in assets.iter_mut() {
-        asset.is_broken = !Path::new(&asset.original_path).exists();
+        if let Some(preview) = &asset.preview_path {
+            if preview.starts_with("./") {
+                let absolute = lib_path.join(&preview[2..]);
+                asset.preview_path = Some(absolute.to_string_lossy().into_owned());
+            }
+        }
     }
 
-    if let Some(tag) = filter_tag {
+    // 1. Filter by Sidebar Tag
+    if let Some(tag) = query.filter_tag {
         let tag_lower = tag.to_lowercase();
         if tag_lower == "images" {
             assets.retain(|a| a.tags.iter().any(|t| IMAGE_EXTENSIONS.contains(&t.to_lowercase().as_str())));
@@ -273,17 +368,100 @@ fn get_library(app: tauri::AppHandle, filter_tag: Option<String>) -> Result<Vec<
         }
     }
 
-    Ok(assets)
+    // 2. Filter by Search Query
+    if let Some(q) = query.query {
+        let q = q.trim().to_lowercase();
+        if !q.is_empty() {
+            let is_exclude = q.starts_with('-');
+            let match_term = if is_exclude { &q[1..] } else { &q };
+
+            assets.retain(|a| {
+                let name_match = a.metadata.file_name.to_lowercase().contains(match_term);
+                let tag_match = a.tags.iter().any(|t| t.to_lowercase().contains(match_term));
+                let snippet_match = a.content_snippet.as_ref().map(|s| s.to_lowercase().contains(match_term)).unwrap_or(false);
+                let any_match = name_match || tag_match || snippet_match;
+                if is_exclude { !any_match } else { any_match }
+            });
+        }
+    }
+
+    // 3. Filter by Selected Tags
+    if let Some(tags) = query.tags {
+        for tag_item in tags {
+            let tag_item = tag_item.trim().to_lowercase();
+            if tag_item.is_empty() { continue; }
+            let is_exclude = tag_item.starts_with('-');
+            let match_tag = if is_exclude { &tag_item[1..] } else { &tag_item };
+
+            assets.retain(|a| {
+                let has_tag = a.tags.iter().any(|t| t.to_lowercase() == match_tag);
+                if is_exclude { !has_tag } else { has_tag }
+            });
+        }
+    }
+
+    // 4. Color Filter
+    if let Some(color_hex) = query.color {
+        if let Some(rgb1) = hex_to_rgb(&color_hex) {
+            assets.retain(|a| {
+                a.dominant_colors.iter().any(|c_hex| {
+                    if let Some(rgb2) = hex_to_rgb(c_hex) {
+                        color_distance(rgb1, rgb2) < 60.0
+                    } else { false }
+                })
+            });
+        }
+    }
+
+    // 5. Date Filter
+    if let Some(d_filter) = query.date {
+        if !d_filter.is_empty() {
+            use chrono::{Utc, TimeZone};
+            assets.retain(|a| {
+                if let Some(dt) = Utc.timestamp_opt(a.metadata.last_modified_os as i64, 0).single() {
+                    let date_str = dt.format("%d.%m.%Y").to_string();
+                    date_str.contains(&d_filter)
+                } else { false }
+            });
+        }
+    }
+
+    // 6. Sort
+    if let Some(sort_type) = query.sort {
+        match sort_type.as_str() {
+            "name_asc"  => assets.sort_by_cached_key(|a| a.metadata.file_name.to_lowercase()),
+            "name_desc" => assets.sort_by_cached_key(|a| std::cmp::Reverse(a.metadata.file_name.to_lowercase())),
+            "date_desc" => assets.sort_by(|a, b| b.created_at.cmp(&a.created_at)),
+            "date_asc"  => assets.sort_by(|a, b| a.created_at.cmp(&b.created_at)),
+            _ => {}
+        }
+    }
+
+    // 7. Final Mapping to SimplifiedAsset
+    Ok(assets.into_iter().map(|a| SimplifiedAsset {
+        id: a.id,
+        original_path: a.original_path,
+        preview_path: a.preview_path,
+        kind: a.kind,
+        tags: a.tags,
+        file_name: a.metadata.file_name,
+        width: a.width,
+        height: a.height,
+        created_at: a.created_at,
+        last_modified_os: a.metadata.last_modified_os,
+        content_snippet: a.content_snippet.as_ref().map(|s| s.lines().take(5).collect::<Vec<_>>().join("\n")),
+        is_broken: a.is_broken,
+    }).collect())
 }
 
+
 #[tauri::command]
-fn get_top_tags(app: tauri::AppHandle) -> Result<Vec<String>, String> {
-    let config = get_config(&app)?;
-    let assets = read_db(&config)?;
+fn get_top_tags(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let assets = state.assets.lock().map_err(|e| e.to_string())?;
 
     let mut counts: HashMap<String, usize> = HashMap::new();
-    for asset in assets {
-        for tag in asset.tags {
+    for asset in assets.iter() {
+        for tag in asset.tags.iter() {
             *counts.entry(tag.to_uppercase()).or_insert(0) += 1;
         }
     }
@@ -293,16 +471,15 @@ fn get_top_tags(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     Ok(sorted.into_iter().map(|(tag, _)| tag).collect())
 }
 
-// FIX 3: Восстановление потерянных превью (с выносом в spawn_blocking для UI)
 #[tauri::command]
-async fn recalculate_db(app: tauri::AppHandle) -> Result<(), String> {
-    let config = get_config(&app)?;
+async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
+    let config = state.config.clone();
+    let current_assets = state.assets.lock().map_err(|e| e.to_string())?.clone();
     
-    tokio::task::spawn_blocking(move || {
-        let assets = read_db(&config)?;
-        let mut valid: Vec<Asset> = Vec::new();
+    let valid = tokio::task::spawn_blocking(move || {
+        let mut result = Vec::new();
 
-        for mut a in assets {
+        for mut a in current_assets {
             if Path::new(&a.original_path).exists() {
                 if let Ok(meta) = extract_metadata(Path::new(&a.original_path)) {
                     a.metadata = meta;
@@ -311,7 +488,6 @@ async fn recalculate_db(app: tauri::AppHandle) -> Result<(), String> {
                     if !a.tags.contains(&tag) { a.tags.push(tag); }
                 }
                 
-                // Восстанавливаем превью если оно потерялось
                 if a.kind == AssetKind::Image {
                     let thumb_missing = a.preview_path.as_ref()
                         .map(|p| !Path::new(p).exists())
@@ -323,24 +499,25 @@ async fn recalculate_db(app: tauri::AppHandle) -> Result<(), String> {
                         }
                     }
                 }
-                valid.push(a);
+                result.push(a);
             }
         }
-
-        write_db(&valid, &config)?;
-        println!("Recalculate complete. {} assets in DB.", valid.len());
-        Ok::<(), String>(())
+        Ok::<Vec<Asset>, String>(result)
     })
     .await
     .unwrap_or_else(|e| Err(format!("Task panicked: {}", e)))?;
 
+    let mut assets = state.assets.lock().map_err(|e| e.to_string())?;
+    *assets = valid;
+    write_db(&assets, &state.config)?;
+    
+    println!("Recalculate complete. {} assets in DB.", assets.len());
     Ok(())
 }
 
 #[tauri::command]
-async fn recalculate_colors(app: tauri::AppHandle) -> Result<usize, String> {
-    let config = get_config(&app)?;
-    let mut assets = read_db(&config)?;
+async fn recalculate_colors(state: State<'_, AppState>) -> Result<usize, String> {
+    let mut assets = state.assets.lock().map_err(|e| e.to_string())?;
     let mut updated = 0;
 
     for asset in assets.iter_mut() {
@@ -353,7 +530,7 @@ async fn recalculate_colors(app: tauri::AppHandle) -> Result<usize, String> {
         }
     }
 
-    write_db(&assets, &config)?;
+    write_db(&assets, &state.config)?;
     Ok(updated)
 }
 
@@ -383,36 +560,37 @@ async fn copy_text_to_clipboard(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn update_asset_tags(app: tauri::AppHandle, id: String, tags: Vec<String>) -> Result<(), String> {
-    let config = get_config(&app)?;
-    let mut assets = read_db(&config)?;
+async fn update_asset_tags(
+    state: State<'_, AppState>,
+    id: String,
+    tags: Vec<String>
+) -> Result<(), String> {
+    let mut assets = state.assets.lock().map_err(|e| e.to_string())?;
     assets.iter_mut().find(|a| a.id == id)
         .ok_or("Asset not found".to_string())
         .map(|a| a.tags = tags)?;
-    write_db(&assets, &config)
+    write_db(&assets, &state.config)
 }
 
 #[tauri::command]
-async fn delete_asset(app: tauri::AppHandle, id: String) -> Result<(), String> {
-    let config = get_config(&app)?;
-    let mut assets = read_db(&config)?;
+async fn delete_asset(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let mut assets = state.assets.lock().map_err(|e| e.to_string())?;
     let index = assets.iter().position(|a| a.id == id)
         .ok_or("Asset not found".to_string())?;
     if let Some(preview) = &assets[index].preview_path {
         let _ = fs::remove_file(preview);
     }
     assets.remove(index);
-    write_db(&assets, &config)
+    write_db(&assets, &state.config)
 }
 
 #[tauri::command]
-async fn rename_asset(app: tauri::AppHandle, id: String, new_name: String) -> Result<(), String> {
-    let config = get_config(&app)?;
-    let mut assets = read_db(&config)?;
+async fn rename_asset(state: State<'_, AppState>, id: String, new_name: String) -> Result<(), String> {
+    let mut assets = state.assets.lock().map_err(|e| e.to_string())?;
     assets.iter_mut().find(|a| a.id == id)
         .ok_or("Asset not found".to_string())
         .map(|a| a.metadata.file_name = new_name)?;
-    write_db(&assets, &config)
+    write_db(&assets, &state.config)
 }
 
 // FIX 5: Поддержка Linux для открытия в проводнике
@@ -471,6 +649,15 @@ fn resolve_path(path: String) -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            let config = get_config(&app.handle())?;
+            let assets = read_db(&config)?;
+            app.manage(AppState {
+                config,
+                assets: Mutex::new(assets),
+            });
+            Ok(())
+        })
         .plugin(tauri_plugin_drag::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -493,6 +680,65 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn get_video_dimensions(path: &Path) -> (u32, u32) {
+    use std::process::Command;
+    
+    let path_str = path.to_string_lossy();
+    
+    // Attempt ffprobe first for high accuracy
+    let ffprobe_res = Command::new("ffprobe")
+        .args(&[
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "csv=s=x:p=0",
+            &path_str
+        ])
+        .output();
+
+    if let Ok(output) = ffprobe_res {
+        let s = String::from_utf8_lossy(&output.stdout);
+        let dims: Vec<&str> = s.trim().split('x').collect();
+        if dims.len() == 2 {
+            let w = dims[0].parse().unwrap_or(0);
+            let h = dims[1].parse().unwrap_or(0);
+            if w > 0 && h > 0 { return (w, h); }
+        }
+    }
+    
+    // Graceful default
+    (1920, 1080)
+}
+
+fn generate_video_thumbnail(video_path: &Path, asset_id: &str, config: &AppConfig) -> Option<String> {
+    use std::process::Command;
+    
+    let thumb_path = Path::new(&config.library_path)
+        .join("thumbnails")
+        .join(format!("{}.jpg", asset_id));
+        
+    let video_path_str = video_path.to_string_lossy();
+    let thumb_path_str = thumb_path.to_string_lossy();
+
+    // Spawn ffmpeg to grab one frame at 1 second
+    let res = Command::new("ffmpeg")
+        .args(&[
+            "-i", &video_path_str,
+            "-ss", "00:00:01",
+            "-vframes", "1",
+            "-q:v", "2",
+            "-y",
+            &thumb_path_str
+        ])
+        .output();
+
+    if res.is_ok() && thumb_path.exists() {
+        Some(thumb_path.to_string_lossy().into_owned())
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
