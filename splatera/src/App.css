@@ -92,3 +92,8 @@ body, html {
 .app-container.is-scrolling .splatera-card {
   pointer-events: none; 
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

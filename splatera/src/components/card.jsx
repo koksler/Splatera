@@ -107,18 +107,19 @@ function Card({ data }) {
     setMenuData({ open: true, x: e.clientX, y: e.clientY });
   };
 
-  const handleCopy = async () => {
-    try {
-      if (isCodeOrText) {
-        await invoke('copy_text_to_clipboard', { path: data.path });
-        notify('Text Copied', `${data.name} copied to clipboard.`);
-      } else {
-        await invoke('copy_image_to_clipboard', { path: data.path });
-        notify('Image Copied', `${data.name} copied to clipboard.`);
-      }
-    } catch {
-      notify('Error', 'Failed to copy.');
-    }
+  const handleCopy = () => {
+    const assetType = isCodeOrText ? 'Text' : (isVideo ? 'File' : 'Image');
+    const msg = `${assetType} Copied`;
+    const action = isCodeOrText ? 'copy_text_to_clipboard' : 'copy_image_to_clipboard';
+    const params = isCodeOrText ? { text: data.contentSnippet || '' } : { path: data.path };
+
+    // Fire and forget (Optimistic)
+    invoke(action, params).catch((err) => {
+      console.error(`${assetType} copy failed:`, err);
+      notify('Copy Failed', `Could not copy ${data.name}.`);
+    });
+
+    notify(msg, `${data.name} ready to paste.`);
   };
 
   const handleAction = async (action) => {
@@ -196,7 +197,7 @@ function Card({ data }) {
           poster={data.preview || undefined}
         />
       ) : (
-        <div className="img-container" style={{ background: '#222', width: '100%', height: '100%' }}>
+        <div className="img-container" style={{ background: '#222', width: '100%', height: '100%', contain: 'layout paint' }}>
           {showImage && (
             <img
               src={(isGif && isHovered) ? convertFileSrc(data.path) : (data.preview || convertFileSrc(data.path))}

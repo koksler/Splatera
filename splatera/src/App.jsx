@@ -84,6 +84,12 @@ function App() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [viewMode, setViewMode] = useState('grid');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  // Pagination state
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const LIMIT = 30;
 
   const notifTimeout = useRef(null);
   const hasLoadedOnce = useRef(false);
@@ -133,10 +139,14 @@ function App() {
     showTemporaryNotif('Process Complete', `Successfully imported ${totalAssetsProcessed} files.`);
   };
 
-  const loadLibrary = async (tag, search, tags, color, date, sort) => {
-    if (!hasLoadedOnce.current) {
+  const loadLibrary = async (tag, search, tags, color, date, sort, currentOffset = 0, append = false) => {
+    if (!hasLoadedOnce.current && currentOffset === 0) {
       setInitialLoading(true);
     }
+    if (currentOffset !== 0) {
+      setIsLoadingMore(true);
+    }
+
     try {
       const assets = await invoke('get_library', { 
         query: {
@@ -145,45 +155,56 @@ function App() {
           tags: tags && tags.length > 0 ? tags : null,
           color: color || null,
           date: date || null,
-          sort: sort || null
+          sort: sort || null,
+          limit: LIMIT,
+          offset: currentOffset
         }
       });
       const mapped = assets.map(mapAsset).filter(Boolean);
+      
+      setHasMore(mapped.length === LIMIT);
 
       setImages(prevImages => {
+        if (!append) return mapped;
+
         const prevMap = new Map(prevImages.map(img => [img.id, img]));
         const seenIds = new Set();
-        const result = [];
+        const result = [...prevImages];
 
         for (const newImg of mapped) {
+          if (prevMap.has(newImg.id)) continue;
           if (seenIds.has(newImg.id)) continue;
           seenIds.add(newImg.id);
-          const prev = prevMap.get(newImg.id);
-          const needsUpdate = !prev ||
-            prev.name !== newImg.name ||
-            prev.width !== newImg.width ||
-            prev.height !== newImg.height ||
-            JSON.stringify(prev.tags) !== JSON.stringify(newImg.tags) ||
-            prev.path !== newImg.path ||
-            prev.preview !== newImg.preview;
-          result.push(needsUpdate ? newImg : prev);
+          result.push(newImg);
         }
         return result;
       });
     } catch (error) {
       console.error("Error loading library:", error);
     } finally {
-      hasLoadedOnce.current = true;
-      setInitialLoading(false);
+      if (currentOffset === 0) {
+        hasLoadedOnce.current = true;
+        setInitialLoading(false);
+      }
+      setIsLoadingMore(false);
     }
+  };
+
+  const loadMore = () => {
+    if (isLoadingMore || !hasMore) return;
+    const nextOffset = offset + LIMIT;
+    setOffset(nextOffset);
+    loadLibrary(activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder, nextOffset, true);
   };
 
   // Debounced library loading — offloads O(N) filtering to Rust.
   // This is the "Magic Sauce" that makes the UI instant and drops RAM usage.
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadLibrary(activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder);
-    }, searchQuery || dateFilter ? 150 : 0); // Fast for clicks, debounced for typing
+      setOffset(0);
+      setHasMore(true);
+      loadLibrary(activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder, 0, false);
+    }, searchQuery || dateFilter ? 150 : 0);
     
     return () => clearTimeout(timer);
   }, [activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder, refreshTrigger]);
@@ -315,6 +336,8 @@ function App() {
             items={deferredImages}
             refreshTrigger={refreshTrigger}
             viewMode={viewMode}
+            loadMore={loadMore}
+            hasMore={hasMore}
           />
         )}
       </div>
@@ -403,11 +426,31 @@ const useJustifiedPositioner = ({ width, items, gutter = 15, targetHeight = 280 
 
 // ─── LibraryGrid ─────────────────────────────────────────────────────────────
 
-const LibraryGrid = memo(({ items, refreshTrigger, viewMode }) => {
+const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore }) => {
   const containerRef = useRef(null);
   const headerRef = useRef(null);
   const resizeTimer = useRef(null);
+  const loaderRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(window.innerWidth);
+
+  useEffect(() => {
+    if (!loadMore || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMore();
+        }
+      },
+      { rootMargin: '200px' } // Load more before we actually hit the bottom
+    );
+
+    if (loaderRef.current) {
+      observer.observe(loaderRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [loadMore, hasMore, items.length]);
 
   useEffect(() => {
     headerRef.current = document.querySelector('.splatera-header');
@@ -500,13 +543,20 @@ const LibraryGrid = memo(({ items, refreshTrigger, viewMode }) => {
               key={viewMode}
               positioner={activePositioner}
               items={items}
-              overscanBy={10}
+              overscanBy={2}
               itemAs={ItemWrapper}
               render={Card}
               itemKey={(data) => data.id}
               height={window.innerHeight}
             />
           </ErrorBoundary>
+        )}
+        
+        {/* Infinite Scroll Sentinel */}
+        {hasMore && (
+          <div ref={loaderRef} className="scroll-sentinel" style={{ height: '40px', margin: '20px 0', display: 'flex', justifyContent: 'center' }}>
+            <div className="spinner" style={{ width: '24px', height: '24px', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--color-accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          </div>
         )}
       </div>
     </div>
