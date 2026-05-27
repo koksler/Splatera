@@ -29,3 +29,8 @@
     width: 100%;
     justify-content: flex-start; /* Прижимаем иконку и текст влево */
   }
+
+  .settings-btn-active {
+    background-color: var(--color-accent) !important;
+    color: #000 !important;
+  }
