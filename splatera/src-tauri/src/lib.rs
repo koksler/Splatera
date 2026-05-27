@@ -1,5 +1,4 @@
-use arboard::{Clipboard, ImageData};
-use std::borrow::Cow;
+use arboard::Clipboard;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -58,6 +57,7 @@ pub struct Asset {
     content_snippet: Option<String>,
     #[serde(default)]
     is_broken: bool,
+    file_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,11 +113,6 @@ fn get_db_path(config: &AppConfig) -> PathBuf {
 }
 
 fn init_db(config: &AppConfig) -> Result<Connection, String> {
-    let old_json = Path::new(&config.library_path).join("database.json");
-    if old_json.exists() {
-        let _ = fs::remove_file(old_json);
-    }
-
     let db_path = get_db_path(config);
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
@@ -137,13 +132,16 @@ fn init_db(config: &AppConfig) -> Result<Connection, String> {
             height INTEGER,
             created_at INTEGER,
             content_snippet TEXT,
-            is_broken INTEGER DEFAULT 0
+            is_broken INTEGER DEFAULT 0,
+            file_hash TEXT
         )",
         (),
     ).map_err(|e| e.to_string())?;
 
+    let _ = conn.execute("ALTER TABLE assets ADD COLUMN file_hash TEXT", ());
     let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_kind ON assets(kind)", ());
     let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_created ON assets(created_at)", ());
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_hash ON assets(file_hash)", ());
 
     Ok(conn)
 }
@@ -201,6 +199,19 @@ fn read_text_snippet(path: &Path) -> Option<String> {
     Some(content.lines().take(20).collect::<Vec<_>>().join("\n"))
 }
 
+fn compute_file_hash(path: &Path) -> Result<String, String> {
+    use std::io::Read;
+    let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut hasher = xxhash_rust::xxh3::Xxh3::new();
+    let mut buffer = [0; 65536];
+    loop {
+        let count = file.read(&mut buffer).map_err(|e| e.to_string())?;
+        if count == 0 { break; }
+        hasher.update(&buffer[..count]);
+    }
+    Ok(format!("{:016x}", hasher.digest()))
+}
+
 fn process_single_path(path: &Path, config: &AppConfig) -> Result<Asset, String> {
     let metadata = extract_metadata(path)?;
     let asset_id = Uuid::new_v4().to_string();
@@ -244,6 +255,8 @@ fn process_single_path(path: &Path, config: &AppConfig) -> Result<Asset, String>
 
     tags.extend(kind.default_tags());
 
+    let file_hash = compute_file_hash(path).ok();
+
     Ok(Asset {
         id: asset_id,
         original_path: path.to_string_lossy().into_owned(),
@@ -257,6 +270,7 @@ fn process_single_path(path: &Path, config: &AppConfig) -> Result<Asset, String>
         created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),
         content_snippet,
         is_broken: false,
+        file_hash,
     })
 }
 
@@ -274,6 +288,7 @@ struct SimplifiedAsset {
     last_modified_os: u64,
     content_snippet: Option<String>,
     is_broken: bool,
+    file_hash: Option<String>,
 }
 
 #[tauri::command]
@@ -314,18 +329,60 @@ async fn process_asset(
 
     let mut saved = Vec::new();
     for a in assets {
+        let mut duplicate_handled = false;
+        if let Some(ref hash) = a.file_hash {
+            let res = tx.query_row(
+                "SELECT id, is_broken, original_path FROM assets WHERE file_hash = ?1 LIMIT 1",
+                rusqlite::params![hash],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?, row.get::<_, String>(2)?))
+            );
+
+            if let Ok((existing_id, is_broken, old_path)) = res {
+                let old_path_exists = Path::new(&old_path).exists();
+                if is_broken == 1 || !old_path_exists {
+                    let _ = tx.execute(
+                        "UPDATE assets SET original_path = ?1, is_broken = 0 WHERE id = ?2",
+                        rusqlite::params![a.original_path, existing_id]
+                    );
+                }
+                
+                saved.push(SimplifiedAsset {
+                    id: existing_id,
+                    original_path: a.original_path.clone(),
+                    preview_path: a.preview_path.clone(),
+                    kind: a.kind.clone(),
+                    tags: a.tags.clone(),
+                    file_name: a.metadata.file_name.clone(),
+                    width: a.width,
+                    height: a.height,
+                    created_at: a.created_at,
+                    last_modified_os: a.metadata.last_modified_os,
+                    content_snippet: a.content_snippet.as_ref().map(|s| s.lines().take(5).collect::<Vec<_>>().join("\n")),
+                    is_broken: false,
+                    file_hash: a.file_hash.clone(),
+                });
+                
+                duplicate_handled = true;
+            }
+        }
+
+        if duplicate_handled {
+            continue;
+        }
+
         let tags_json = serde_json::to_string(&a.tags).unwrap_or_default();
         let color_json = serde_json::to_string(&a.dominant_colors).unwrap_or_default();
         let kind_str = format!("{:?}", a.kind);
 
         let res = tx.execute(
-            "INSERT OR IGNORE INTO assets (id, original_path, preview_path, kind, dominant_colors, tags, size_bytes, file_name, extension, last_modified_os, width, height, created_at, content_snippet, is_broken)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            "INSERT OR IGNORE INTO assets (id, original_path, preview_path, kind, dominant_colors, tags, size_bytes, file_name, extension, last_modified_os, width, height, created_at, content_snippet, is_broken, file_hash)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 a.id, a.original_path, a.preview_path, kind_str,
                 color_json, tags_json, a.metadata.size_bytes, a.metadata.file_name,
                 a.metadata.extension, a.metadata.last_modified_os, a.width, a.height,
-                a.created_at, a.content_snippet, if a.is_broken { 1 } else { 0 }
+                a.created_at, a.content_snippet, if a.is_broken { 1 } else { 0 },
+                a.file_hash
             ],
         );
 
@@ -344,6 +401,7 @@ async fn process_asset(
                     last_modified_os: a.metadata.last_modified_os,
                     content_snippet: a.content_snippet.as_ref().map(|s| s.lines().take(5).collect::<Vec<_>>().join("\n")),
                     is_broken: a.is_broken,
+                    file_hash: a.file_hash,
                 });
             }
         }
@@ -360,7 +418,7 @@ fn get_library(
 ) -> Result<Vec<SimplifiedAsset>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     
-    let mut sql = "SELECT id, original_path, preview_path, kind, dominant_colors, tags, file_name, width, height, created_at, last_modified_os, content_snippet, is_broken FROM assets WHERE 1=1".to_string();
+    let mut sql = "SELECT id, original_path, preview_path, kind, dominant_colors, tags, file_name, width, height, created_at, last_modified_os, content_snippet, is_broken, file_hash FROM assets WHERE 1=1".to_string();
     let mut params_vec: Vec<String> = Vec::new();
 
     if let Some(tag) = &query.filter_tag {
@@ -475,6 +533,7 @@ fn get_library(
             last_modified_os: row.get(10).unwrap_or(0),
             content_snippet: row.get(11).ok().map(|s: String| s.lines().take(5).collect::<Vec<_>>().join("\n")),
             is_broken: row.get::<_, i32>(12).unwrap_or(0) == 1,
+            file_hash: row.get(13).ok(),
         };
 
         if let Some(target_color) = &query.color {
@@ -520,7 +579,7 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
     
     let assets: Vec<Asset> = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
-        let mut stmt = conn.prepare("SELECT id, original_path, preview_path, kind, dominant_colors, tags, size_bytes, file_name, extension, last_modified_os, width, height, created_at, content_snippet, is_broken FROM assets").map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare("SELECT id, original_path, preview_path, kind, dominant_colors, tags, size_bytes, file_name, extension, last_modified_os, width, height, created_at, content_snippet, is_broken, file_hash FROM assets").map_err(|e| e.to_string())?;
         let items = stmt.query_map((), |row| {
             let kind_str: String = row.get(3)?;
             let kind = match kind_str.as_str() {
@@ -535,6 +594,7 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
                 id: row.get(0)?, original_path: row.get(1)?, preview_path: row.get(2)?, kind, dominant_colors, tags,
                 metadata: FileMetadata { size_bytes: row.get(6)?, file_name: row.get(7)?, extension: row.get(8)?, last_modified_os: row.get(9)? },
                 width: row.get(10)?, height: row.get(11)?, created_at: row.get(12)?, content_snippet: row.get(13)?, is_broken: row.get::<_, i32>(14)? == 1,
+                file_hash: row.get(15)?,
             })
         }).map_err(|e| e.to_string())?;
         items.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
@@ -558,6 +618,9 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
                         }
                     }
                 }
+                if a.file_hash.is_none() || a.file_hash.as_deref() == Some("") {
+                    a.file_hash = compute_file_hash(Path::new(&a.original_path)).ok();
+                }
                 result.push(a);
             }
         }
@@ -572,13 +635,14 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
         let tags_json = serde_json::to_string(&a.tags).unwrap_or_default();
         let color_json = serde_json::to_string(&a.dominant_colors).unwrap_or_default();
         let _ = tx.execute(
-            "INSERT INTO assets (id, original_path, preview_path, kind, dominant_colors, tags, size_bytes, file_name, extension, last_modified_os, width, height, created_at, content_snippet, is_broken)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            "INSERT INTO assets (id, original_path, preview_path, kind, dominant_colors, tags, size_bytes, file_name, extension, last_modified_os, width, height, created_at, content_snippet, is_broken, file_hash)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 a.id, a.original_path, a.preview_path, format!("{:?}", a.kind),
                 color_json, tags_json, a.metadata.size_bytes, a.metadata.file_name,
                 a.metadata.extension, a.metadata.last_modified_os, a.width, a.height,
-                a.created_at, a.content_snippet, if a.is_broken { 1 } else { 0 }
+                a.created_at, a.content_snippet, if a.is_broken { 1 } else { 0 },
+                a.file_hash
             ],
         );
     }
@@ -747,6 +811,30 @@ async fn copy_image_to_clipboard(_state: State<'_, AppState>, path: String) -> R
     copy_file_to_os_clipboard(&path)
 }
 
+#[tauri::command]
+fn show_window(window: tauri::Window) {
+    let _ = window.show();
+}
+
+/// Returns only paths that are NOT already tracked in the library by their original_path.
+/// This is used to silently block internal drag-and-drops (card → app) before the import modal appears.
+#[tauri::command]
+fn filter_known_paths(state: State<'_, AppState>, paths: Vec<String>) -> Result<Vec<String>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let mut unknown = Vec::new();
+    for path in paths {
+        let exists: bool = conn.query_row(
+            "SELECT 1 FROM assets WHERE original_path = ?1 LIMIT 1",
+            rusqlite::params![path],
+            |_| Ok(true)
+        ).unwrap_or(false);
+        if !exists {
+            unknown.push(path);
+        }
+    }
+    Ok(unknown)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -780,6 +868,8 @@ pub fn run() {
             open_in_folder,
             read_full_text_file,
             resolve_path,
+            show_window,
+            filter_known_paths,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

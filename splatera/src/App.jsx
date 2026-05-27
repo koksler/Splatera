@@ -84,7 +84,7 @@ function App() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [viewMode, setViewMode] = useState('grid');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  
+
   // Pagination state
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -148,7 +148,7 @@ function App() {
     }
 
     try {
-      const assets = await invoke('get_library', { 
+      const assets = await invoke('get_library', {
         query: {
           filter_tag: tag,
           query: search || null,
@@ -161,7 +161,7 @@ function App() {
         }
       });
       const mapped = assets.map(mapAsset).filter(Boolean);
-      
+
       setHasMore(mapped.length === LIMIT);
 
       setImages(prevImages => {
@@ -205,7 +205,7 @@ function App() {
       setHasMore(true);
       loadLibrary(activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder, 0, false);
     }, searchQuery || dateFilter ? 150 : 0);
-    
+
     return () => clearTimeout(timer);
   }, [activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder, refreshTrigger]);
 
@@ -234,6 +234,8 @@ function App() {
   };
 
   useEffect(() => {
+    invoke('show_window').catch(console.error);
+
     const preventDefault = (e) => e.preventDefault();
     window.addEventListener('dragover', preventDefault);
     window.addEventListener('drop', preventDefault);
@@ -257,10 +259,17 @@ function App() {
 
     const unlistenDragEnter = listen('tauri://drag-enter', () => setIsDragging(true));
     const unlistenDragLeave = listen('tauri://drag-leave', () => setIsDragging(false));
-    const unlistenDrop = listen('tauri://drag-drop', (event) => {
+    const unlistenDrop = listen('tauri://drag-drop', async (event) => {
       setIsDragging(false);
       const filePaths = event.payload.paths;
-      if (filePaths?.length) setPendingImport(filePaths);
+      if (!filePaths?.length) return;
+      try {
+        const unknown = await invoke('filter_known_paths', { paths: filePaths });
+        if (unknown.length) setPendingImport(unknown);
+      } catch {
+        // fallback: show all if the command fails
+        setPendingImport(filePaths);
+      }
     });
 
     return () => {
@@ -551,7 +560,7 @@ const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore }
             />
           </ErrorBoundary>
         )}
-        
+
         {/* Infinite Scroll Sentinel */}
         {hasMore && (
           <div ref={loaderRef} className="scroll-sentinel" style={{ height: '40px', margin: '20px 0', display: 'flex', justifyContent: 'center' }}>
