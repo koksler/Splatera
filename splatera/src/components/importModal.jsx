@@ -11,6 +11,7 @@ const getLanguage = (ext) => {
 };
 
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
+const VIDEO_EXTS  = ['.mp4', '.webm', '.mov'];
 const TEXT_EXTS  = ['.txt', '.md', '.js', '.py', '.rs', '.css', '.html', '.json'];
 
 const getAutoTags = (path) => {
@@ -28,6 +29,7 @@ export default function ImportModal({ paths, onConfirm, onClose }) {
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewCode, setPreviewCode] = useState('');
   const [previewExt, setPreviewExt] = useState('');
+  const [isVideo, setIsVideo] = useState(false);
 
   const currentPath = paths[currentIndex];
   const isLast = currentIndex === paths.length - 1;
@@ -39,6 +41,7 @@ export default function ImportModal({ paths, onConfirm, onClose }) {
     setPreviewCode('');
     setInputValue('');
     setBatchName('');
+    setIsVideo(false);
     setTags(getAutoTags(currentPath));
 
     const ext = currentPath.slice(currentPath.lastIndexOf('.')).toLowerCase();
@@ -46,6 +49,9 @@ export default function ImportModal({ paths, onConfirm, onClose }) {
 
     if (IMAGE_EXTS.includes(ext)) {
       setPreviewUrl(convertFileSrc(currentPath));
+    } else if (VIDEO_EXTS.includes(ext)) {
+      setPreviewUrl(convertFileSrc(currentPath));
+      setIsVideo(true);
     } else if (TEXT_EXTS.includes(ext)) {
       invoke('read_full_text_file', { path: currentPath })
         .then(text => setPreviewCode(text.split('\n').slice(0, 20).join('\n')))
@@ -99,7 +105,18 @@ export default function ImportModal({ paths, onConfirm, onClose }) {
           backgroundColor: previewCode ? '#1E1E1E' : 'rgba(0,0,0,0.3)',
           alignItems: previewCode ? 'flex-start' : 'center',
         }}>
-          {previewUrl && <img src={previewUrl} alt="preview" className="modal-preview-img" />}
+          {previewUrl && !isVideo && <img src={previewUrl} alt="preview" className="modal-preview-img" />}
+          {previewUrl && isVideo && (
+            <video
+              src={previewUrl}
+              className="modal-preview-img"
+              style={{ objectFit: 'contain', maxHeight: '100%', maxWidth: '100%' }}
+              muted
+              autoPlay
+              loop
+              playsInline
+            />
+          )}
           {previewCode && (
             <SyntaxHighlighter
               language={getLanguage(previewExt)}
