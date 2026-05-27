@@ -8,6 +8,15 @@ import CardPopup from './cardPopup';
 import ContextMenu from './contextMenu';
 import './card.css';
 
+let autoplayVideos = false;
+window.addEventListener('set-autoplay-videos', (e) => {
+  autoplayVideos = e.detail;
+  document.querySelectorAll('.card-video').forEach(v => {
+    if (autoplayVideos) v.play().catch(() => { });
+    else { v.pause(); v.currentTime = 0; }
+  });
+});
+
 const getLanguage = (ext) => {
   if (!ext) return 'text';
   const map = { js: 'javascript', py: 'python', rs: 'rust', html: 'html', css: 'css', json: 'json', md: 'markdown' };
@@ -34,25 +43,26 @@ function Card({ data }) {
   const [menuData, setMenuData] = useState({ open: false, x: 0, y: 0 });
   const [showImage, setShowImage] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [autoplay, setAutoplay] = useState(autoplayVideos);
 
-  // FIX: The original effect ran once on mount and checked is-scrolling at that moment.
-  // After a grid re-layout (resize, compact↔maximized toggle), cards remount but
-  // is-scrolling is often still set from the resize event, leaving images permanently
-  // hidden until the next hover/scroll cycle.
-  //
-  // New approach: always start a short delay (avoids layout thrash on initial mount),
-  // but cap it at 80ms — short enough that images appear immediately after resize
-  // without waiting for an interaction. We no longer gate on is-scrolling here because
-  // the scroll-based image deferral is already handled by the CSS opacity transition
-  // on the <img> itself (opacity 0→1 on load). The is-scrolling class is only used
-  // to skip video autoplay (handled in handleMouseEnter), not image visibility.
+  useEffect(() => {
+    const handler = (e) => setAutoplay(e.detail);
+    window.addEventListener('set-autoplay-videos', handler);
+    return () => window.removeEventListener('set-autoplay-videos', handler);
+  }, []);
+
   useEffect(() => {
     if (showImageTimer.current) clearTimeout(showImageTimer.current);
-    showImageTimer.current = setTimeout(() => setShowImage(true), 80);
+    showImageTimer.current = setTimeout(() => {
+      setShowImage(true);
+      if (autoplayVideos && isVideo && videoRef.current) {
+        videoRef.current.play().catch(() => { });
+      }
+    }, 80);
     return () => {
       if (showImageTimer.current) clearTimeout(showImageTimer.current);
     };
-  }, [data.id]); // Re-run if the card's data identity changes, but not on every render
+  }, [data.id]);
 
   if (!data) return null;
 
@@ -68,13 +78,13 @@ function Card({ data }) {
   const isCodeOrText = data.kind === 'Code' || data.kind === 'Text';
   const isVideo = data.kind === 'Video' || ext === 'mp4' || ext === 'webm' || ext === 'mov';
   const isGif = ext === 'gif';
+  const isAnimatable = ext === 'gif' || ext === 'webp'; // gif always, webp when animated
   const cardAspectRatio = data.width && data.height ? `${data.width} / ${data.height}` : '1 / 1';
 
   const handleMouseEnter = () => {
     setIsHovered(true);
-    // FIX: Only gate video autoplay on scrolling, not image visibility
     const isScrolling = document.querySelector('.app-container')?.classList.contains('is-scrolling');
-    if (isScrolling) return;
+    if (isScrolling && !autoplayVideos) return;
 
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
     hoverTimeout.current = setTimeout(() => {
@@ -85,7 +95,7 @@ function Card({ data }) {
   const handleMouseLeave = () => {
     setIsHovered(false);
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-    if (videoRef.current) {
+    if (videoRef.current && !autoplay) {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
     }
@@ -200,7 +210,7 @@ function Card({ data }) {
         <div className="img-container" style={{ background: '#222', width: '100%', height: '100%', contain: 'layout paint' }}>
           {showImage && (
             <img
-              src={(isGif && isHovered) ? convertFileSrc(data.path) : (data.preview || convertFileSrc(data.path))}
+              src={(isGif && isHovered) || (isAnimatable && autoplay) ? convertFileSrc(data.path) : (data.preview || convertFileSrc(data.path))}
               alt={data.name}
               loading="lazy"
               decoding="async"
