@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
-import { Copy, Minimize2 } from 'lucide-react';
+import { Copy, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import Button from './button';
@@ -13,7 +13,7 @@ const getLanguage = (ext) => {
   return map[ext.toLowerCase()] || 'text';
 };
 
-export default function Lightbox({ file, onClose }) {
+export default function Lightbox({ file, onClose, onPrev, onNext }) {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -41,7 +41,9 @@ export default function Lightbox({ file, onClose }) {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
+      if (e.key === 'ArrowLeft' && onPrev) { e.preventDefault(); onPrev(); }
+      if (e.key === 'ArrowRight' && onNext) { e.preventDefault(); onNext(); }
     };
     window.addEventListener('keydown', handleKeyDown);
 
@@ -51,7 +53,7 @@ export default function Lightbox({ file, onClose }) {
     const handleWheelNative = (e) => {
       if (isCodeOrText) return;
       e.preventDefault();
-      const zoomFactor = 0.0015; 
+      const zoomFactor = 0.0015;
       const delta = -e.deltaY * zoomFactor;
 
       setScale((prev) => {
@@ -68,7 +70,7 @@ export default function Lightbox({ file, onClose }) {
       window.removeEventListener('keydown', handleKeyDown);
       overlay.removeEventListener('wheel', handleWheelNative);
     };
-  }, [onClose, isCodeOrText]);
+  }, [onClose, onPrev, onNext, isCodeOrText]);
 
   const handleMouseDown = (e) => {
     if (isCodeOrText) return;
@@ -95,6 +97,13 @@ export default function Lightbox({ file, onClose }) {
     }
   };
 
+  const handleImageDoubleClick = (e) => {
+    e.stopPropagation();
+    // Reset zoom
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
+  };
+
   const targetPath = file.original_path || file.path;
   const originalImageUrl = convertFileSrc(targetPath);
 
@@ -113,6 +122,18 @@ export default function Lightbox({ file, onClose }) {
         {!isCodeOrText && !isVideo && <Button icon={Copy} onClick={() => invoke('copy_image_to_clipboard', { path: file.path })} />}
         <Button icon={Minimize2} onClick={onClose} /> 
       </div>
+
+      {/* Prev / Next navigation buttons */}
+      {onPrev && (
+        <button className="lightbox-nav lightbox-nav-prev" onClick={(e) => { e.stopPropagation(); onPrev(); }}>
+          <ChevronLeft size={20} />
+        </button>
+      )}
+      {onNext && (
+        <button className="lightbox-nav lightbox-nav-next" onClick={(e) => { e.stopPropagation(); onNext(); }}>
+          <ChevronRight size={20} />
+        </button>
+      )}
 
       <div className="lightbox-content">
         {isCodeOrText ? (
@@ -153,12 +174,13 @@ export default function Lightbox({ file, onClose }) {
         ) : (
           <img 
             ref={imgRef}
-            src={originalImageUrl} 
-            alt={file.name} 
-            className="lightbox-image" 
+            src={originalImageUrl}
+            alt={file.name}
+            className="lightbox-image"
             onMouseDown={handleMouseDown}
             onClick={(e) => e.stopPropagation()}
-            style={{ 
+            onDoubleClick={handleImageDoubleClick}
+            style={{
               transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
               transition: isPanning ? 'none' : 'transform 0.15s ease-out',
               cursor: scale > 1 ? (isPanning ? 'grabbing' : 'grab') : 'zoom-in',

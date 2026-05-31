@@ -50,19 +50,19 @@
     z-index: 10000;
   }
 
-  /* Окно с кодом в Lightbox */
+  /* Code window in Lightbox */
 .lightbox-code-wrapper {
   width: 80vw;
   height: 85vh;
   background-color: #1e1e1e;
   border-radius: 8px;
-  overflow: auto; /* Включаем вертикальный и горизонтальный скролл */
+  overflow: auto;
   box-shadow: 0 20px 60px rgba(0,0,0,0.5);
   pointer-events: auto;
   text-align: left;
 }
 
-/* Стилизация скроллбара под VS Code */
+/* VS Code-like scrollbar styling */
 .lightbox-code-wrapper::-webkit-scrollbar {
   width: 14px;
   height: 14px;
@@ -95,3 +95,29 @@
   object-fit: contain;
   outline: none;
 }
+
+/* Prev / Next navigation arrows */
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10000;
+  background: rgba(34, 34, 34, 0.6);
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  color: var(--color-text-main);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.lightbox-nav:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.lightbox-nav-prev { left: 20px; }
+.lightbox-nav-next { right: 20px; }
