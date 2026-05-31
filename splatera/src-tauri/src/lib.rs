@@ -1,34 +1,43 @@
 use arboard::Clipboard;
+use color_thief::{get_palette, ColorFormat};
+use image::imageops::FilterType;
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
-use uuid::Uuid;
-use image::imageops::FilterType;
-use color_thief::{get_palette, ColorFormat};
-use walkdir::WalkDir;
-use std::env;
-use tauri::{Manager, State, AppHandle};
 use std::sync::Mutex;
-use rusqlite::{params, Connection};
+use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, Manager, State};
+use uuid::Uuid;
+use walkdir::WalkDir;
 
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "gif"];
 const VIDEO_EXTENSIONS: &[&str] = &["mp4", "webm", "mov"];
-const TEXT_EXTENSIONS:  &[&str] = &["txt", "md"];
-const CODE_EXTENSIONS:  &[&str] = &["js", "py", "rs", "css", "html", "json"];
-const ALL_EXTENSIONS:   &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "gif", "mp4", "webm", "mov", "txt", "md", "js", "py", "rs", "css", "html", "json"];
+const TEXT_EXTENSIONS: &[&str] = &["txt", "md"];
+const CODE_EXTENSIONS: &[&str] = &["js", "py", "rs", "css", "html", "json"];
+const ALL_EXTENSIONS: &[&str] = &[
+    "png", "jpg", "jpeg", "webp", "bmp", "gif", "mp4", "webm", "mov", "txt", "md", "js", "py",
+    "rs", "css", "html", "json",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-enum AssetKind { Image, Code, Text, Video, Unknown }
+enum AssetKind {
+    Image,
+    Code,
+    Text,
+    Video,
+    Unknown,
+}
 
 impl AssetKind {
     fn default_tags(&self) -> Vec<String> {
         match self {
-            AssetKind::Image   => vec!["image".to_string()],
-            AssetKind::Text    => vec!["text".to_string()],
-            AssetKind::Code    => vec!["code".to_string()],
-            AssetKind::Video   => vec!["video".to_string()],
+            AssetKind::Image => vec!["image".to_string()],
+            AssetKind::Text => vec!["text".to_string()],
+            AssetKind::Code => vec!["code".to_string()],
+            AssetKind::Video => vec!["video".to_string()],
             AssetKind::Unknown => vec![],
         }
     }
@@ -136,12 +145,22 @@ fn init_db(config: &AppConfig) -> Result<Connection, String> {
             file_hash TEXT
         )",
         (),
-    ).map_err(|e| e.to_string())?;
+    )
+    .map_err(|e| e.to_string())?;
 
     let _ = conn.execute("ALTER TABLE assets ADD COLUMN file_hash TEXT", ());
-    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_kind ON assets(kind)", ());
-    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_created ON assets(created_at)", ());
-    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_hash ON assets(file_hash)", ());
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_assets_kind ON assets(kind)",
+        (),
+    );
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_assets_created ON assets(created_at)",
+        (),
+    );
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_assets_hash ON assets(file_hash)",
+        (),
+    );
 
     Ok(conn)
 }
@@ -150,9 +169,18 @@ fn extract_metadata(path: &Path) -> Result<FileMetadata, String> {
     let meta = fs::metadata(path).map_err(|e| e.to_string())?;
     Ok(FileMetadata {
         size_bytes: meta.len(),
-        file_name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
-        extension: path.extension().unwrap_or_default().to_string_lossy().to_string(),
-        last_modified_os: meta.modified()
+        file_name: path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string(),
+        extension: path
+            .extension()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string(),
+        last_modified_os: meta
+            .modified()
             .unwrap_or(SystemTime::now())
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -163,15 +191,20 @@ fn extract_metadata(path: &Path) -> Result<FileMetadata, String> {
 fn extract_colors(img: &image::DynamicImage) -> Vec<String> {
     let sample = img.resize(256, 256, FilterType::Nearest);
     get_palette(sample.into_rgb8().as_raw(), ColorFormat::Rgb, 5, 5)
-        .map(|palette| palette.into_iter()
-            .map(|c| format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b))
-            .collect())
+        .map(|palette| {
+            palette
+                .into_iter()
+                .map(|c| format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
 fn hex_to_rgb(hex: &str) -> Option<(i32, i32, i32)> {
     let hex = hex.trim_start_matches('#');
-    if hex.len() != 6 { return None; }
+    if hex.len() != 6 {
+        return None;
+    }
     let r = i32::from_str_radix(&hex[0..2], 16).ok()?;
     let g = i32::from_str_radix(&hex[2..4], 16).ok()?;
     let b = i32::from_str_radix(&hex[4..6], 16).ok()?;
@@ -186,7 +219,11 @@ fn color_distance(c1: (i32, i32, i32), c2: (i32, i32, i32)) -> f64 {
 }
 
 fn save_thumbnail(img: &image::DynamicImage, asset_id: &str, config: &AppConfig) -> Option<String> {
-    let thumb = img.resize(config.thumbnail_size, config.thumbnail_size, FilterType::Lanczos3);
+    let thumb = img.resize(
+        config.thumbnail_size,
+        config.thumbnail_size,
+        FilterType::Lanczos3,
+    );
     let path = Path::new(&config.library_path)
         .join("thumbnails")
         .join(format!("{}.jpg", asset_id));
@@ -206,7 +243,9 @@ fn compute_file_hash(path: &Path) -> Result<String, String> {
     let mut buffer = [0; 65536];
     loop {
         let count = file.read(&mut buffer).map_err(|e| e.to_string())?;
-        if count == 0 { break; }
+        if count == 0 {
+            break;
+        }
         hasher.update(&buffer[..count]);
     }
     Ok(format!("{:016x}", hasher.digest()))
@@ -217,7 +256,11 @@ fn process_single_path(path: &Path, config: &AppConfig) -> Result<Asset, String>
     let asset_id = Uuid::new_v4().to_string();
 
     let ext = metadata.extension.to_lowercase();
-    let mut tags = if ext.is_empty() { vec![] } else { vec![ext.clone()] };
+    let mut tags = if ext.is_empty() {
+        vec![]
+    } else {
+        vec![ext.clone()]
+    };
 
     let kind;
     let mut preview_path = None;
@@ -239,16 +282,18 @@ fn process_single_path(path: &Path, config: &AppConfig) -> Result<Asset, String>
         let (w, h) = get_video_dimensions(path);
         width = w;
         height = h;
-        
+
         preview_path = generate_video_thumbnail(path, &asset_id, config);
     } else if TEXT_EXTENSIONS.contains(&ext.as_str()) {
         kind = AssetKind::Text;
         content_snippet = read_text_snippet(path);
-        width = 400; height = 300;
+        width = 400;
+        height = 300;
     } else if CODE_EXTENSIONS.contains(&ext.as_str()) {
         kind = AssetKind::Code;
         content_snippet = read_text_snippet(path);
-        width = 400; height = 300;
+        width = 400;
+        height = 300;
     } else {
         kind = AssetKind::Unknown;
     }
@@ -267,7 +312,10 @@ fn process_single_path(path: &Path, config: &AppConfig) -> Result<Asset, String>
         metadata,
         width,
         height,
-        created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),
+        created_at: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
         content_snippet,
         is_broken: false,
         file_hash,
@@ -292,18 +340,224 @@ struct SimplifiedAsset {
 }
 
 #[tauri::command]
+fn is_temp_path(path: &Path) -> bool {
+    let temp = std::env::temp_dir();
+    if let (Ok(p), Ok(t)) = (path.canonicalize(), temp.canonicalize()) {
+        p.starts_with(t)
+    } else {
+        path.starts_with(&temp)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PrepareResult {
+    paths: Vec<String>,
+    has_temp: bool,
+}
+
+#[tauri::command]
+async fn prepare_dropped_paths(
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+) -> Result<PrepareResult, String> {
+    let config = state.config.clone();
+    let mut result = Vec::new();
+    let mut has_temp = false;
+
+    for p in paths {
+        let src_path = Path::new(&p);
+        if src_path.exists() && is_temp_path(src_path) {
+            has_temp = true;
+            let ext = src_path
+                .extension()
+                .map(|e| e.to_string_lossy().to_lowercase())
+                .unwrap_or_else(|| "_".to_string());
+
+            let local_dir = Path::new(&config.library_path).join("local").join(&ext);
+            if let Err(e) = fs::create_dir_all(&local_dir) {
+                println!("Failed to create local dir for temp: {}", e);
+                result.push(p);
+                continue;
+            }
+
+            let file_name = match src_path.file_name() {
+                Some(n) => n,
+                None => {
+                    result.push(p);
+                    continue;
+                }
+            };
+
+            let mut dest_path = local_dir.join(file_name);
+            if dest_path.exists() {
+                let stem = src_path.file_stem().unwrap_or_default().to_string_lossy();
+                let mut counter = 1;
+                loop {
+                    let new_name = if ext == "_" {
+                        format!("{}_{}", stem, counter)
+                    } else {
+                        format!("{}_{}.{}", stem, counter, ext)
+                    };
+                    let new_path = local_dir.join(new_name);
+                    if !new_path.exists() {
+                        dest_path = new_path;
+                        break;
+                    }
+                    counter += 1;
+                }
+            }
+
+            if let Err(e) = fs::copy(&src_path, &dest_path) {
+                println!("Failed to copy temp file: {}", e);
+                result.push(p);
+            } else {
+                result.push(dest_path.to_string_lossy().into_owned());
+            }
+        } else {
+            result.push(p);
+        }
+    }
+
+    Ok(PrepareResult { paths: result, has_temp })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ImportCheckResult {
+    allowed_paths: Vec<String>,
+    duplicate_paths: Vec<String>,
+    duplicate_hashes: Vec<String>,
+}
+
+#[tauri::command]
+async fn check_import_paths(
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+) -> Result<ImportCheckResult, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    
+    let mut allowed_paths = Vec::new();
+    let mut duplicate_paths = Vec::new();
+    let mut duplicate_hashes = Vec::new();
+
+    for p in paths {
+        let path = Path::new(&p);
+        if !path.exists() {
+            continue;
+        }
+
+        let path_exists: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM assets WHERE original_path = ?1",
+                rusqlite::params![p],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        if path_exists > 0 {
+            duplicate_paths.push(p);
+            continue;
+        }
+
+        let ext = path
+            .extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+
+        if ALL_EXTENSIONS.contains(&ext.as_str()) {
+            if let Ok(hash) = compute_file_hash(path) {
+                let hash_exists: i32 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM assets WHERE file_hash = ?1",
+                        rusqlite::params![hash],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(0);
+
+                if hash_exists > 0 {
+                    duplicate_hashes.push(p);
+                    continue;
+                }
+            }
+        }
+
+        allowed_paths.push(p);
+    }
+
+    Ok(ImportCheckResult {
+        allowed_paths,
+        duplicate_paths,
+        duplicate_hashes,
+    })
+}
+
+#[tauri::command]
+async fn copy_to_local_library(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<String, String> {
+    let config = state.config.clone();
+    let src_path = Path::new(&path);
+    if !src_path.exists() {
+        return Err(format!("Source path does not exist: {}", path));
+    }
+
+    let ext = src_path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_else(|| "_".to_string());
+
+    let local_dir = Path::new(&config.library_path).join("local").join(&ext);
+    if src_path.starts_with(&local_dir) {
+        return Ok(path);
+    }
+
+    fs::create_dir_all(&local_dir).map_err(|e| e.to_string())?;
+
+    let file_name = src_path
+        .file_name()
+        .ok_or_else(|| "Invalid file name".to_string())?;
+
+    let mut dest_path = local_dir.join(file_name);
+    if dest_path.exists() {
+        let stem = src_path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy();
+        let mut counter = 1;
+        loop {
+            let new_name = if ext == "_" {
+                format!("{}_{}", stem, counter)
+            } else {
+                format!("{}_{}.{}", stem, counter, ext)
+            };
+            let new_path = local_dir.join(new_name);
+            if !new_path.exists() {
+                dest_path = new_path;
+                break;
+            }
+            counter += 1;
+        }
+    }
+
+    fs::copy(&src_path, &dest_path).map_err(|e| e.to_string())?;
+
+    Ok(dest_path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
 async fn process_asset(
     _app: AppHandle,
     state: State<'_, AppState>,
-    path: String
+    path: String,
 ) -> Result<Vec<SimplifiedAsset>, String> {
     let config = state.config.clone();
-    
+
     let assets = tokio::task::spawn_blocking(move || {
         let root = Path::new(&path);
 
         let paths: Vec<PathBuf> = if root.is_dir() {
-            WalkDir::new(root).into_iter()
+            WalkDir::new(root)
+                .into_iter()
                 .filter_map(|e| e.ok())
                 .filter(|e| e.file_type().is_file())
                 .map(|e| e.path().to_path_buf())
@@ -312,10 +566,13 @@ async fn process_asset(
             vec![root.to_path_buf()]
         };
 
-        let processed: Vec<Asset> = paths.into_iter()
-            .filter(|p| p.extension()
-                .map(|e| ALL_EXTENSIONS.contains(&e.to_string_lossy().to_lowercase().as_str()))
-                .unwrap_or(false))
+        let processed: Vec<Asset> = paths
+            .into_iter()
+            .filter(|p| {
+                p.extension()
+                    .map(|e| ALL_EXTENSIONS.contains(&e.to_string_lossy().to_lowercase().as_str()))
+                    .unwrap_or(false)
+            })
             .filter_map(|p| process_single_path(&p, &config).ok())
             .collect();
 
@@ -334,7 +591,13 @@ async fn process_asset(
             let res = tx.query_row(
                 "SELECT id, is_broken, original_path FROM assets WHERE file_hash = ?1 LIMIT 1",
                 rusqlite::params![hash],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?, row.get::<_, String>(2)?))
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i32>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                },
             );
 
             if let Ok((existing_id, is_broken, old_path)) = res {
@@ -342,10 +605,10 @@ async fn process_asset(
                 if is_broken == 1 || !old_path_exists {
                     let _ = tx.execute(
                         "UPDATE assets SET original_path = ?1, is_broken = 0 WHERE id = ?2",
-                        rusqlite::params![a.original_path, existing_id]
+                        rusqlite::params![a.original_path, existing_id],
                     );
                 }
-                
+
                 saved.push(SimplifiedAsset {
                     id: existing_id,
                     original_path: a.original_path.clone(),
@@ -357,11 +620,14 @@ async fn process_asset(
                     height: a.height,
                     created_at: a.created_at,
                     last_modified_os: a.metadata.last_modified_os,
-                    content_snippet: a.content_snippet.as_ref().map(|s| s.lines().take(5).collect::<Vec<_>>().join("\n")),
+                    content_snippet: a
+                        .content_snippet
+                        .as_ref()
+                        .map(|s| s.lines().take(5).collect::<Vec<_>>().join("\n")),
                     is_broken: false,
                     file_hash: a.file_hash.clone(),
                 });
-                
+
                 duplicate_handled = true;
             }
         }
@@ -399,7 +665,10 @@ async fn process_asset(
                     height: a.height,
                     created_at: a.created_at,
                     last_modified_os: a.metadata.last_modified_os,
-                    content_snippet: a.content_snippet.as_ref().map(|s| s.lines().take(5).collect::<Vec<_>>().join("\n")),
+                    content_snippet: a
+                        .content_snippet
+                        .as_ref()
+                        .map(|s| s.lines().take(5).collect::<Vec<_>>().join("\n")),
                     is_broken: a.is_broken,
                     file_hash: a.file_hash,
                 });
@@ -417,7 +686,7 @@ fn get_library(
     query: LibraryQuery,
 ) -> Result<Vec<SimplifiedAsset>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    
+
     let mut sql = "SELECT id, original_path, preview_path, kind, dominant_colors, tags, file_name, width, height, created_at, last_modified_os, content_snippet, is_broken, file_hash FROM assets WHERE 1=1".to_string();
     let mut params_vec: Vec<String> = Vec::new();
 
@@ -438,9 +707,11 @@ fn get_library(
             let is_exclude = q.starts_with('-');
             let term = if is_exclude { &q[1..] } else { &q };
             let pattern = format!("%{}%", term);
-            
+
             if is_exclude {
-                sql.push_str(" AND file_name NOT LIKE ? AND tags NOT LIKE ? AND content_snippet NOT LIKE ?");
+                sql.push_str(
+                    " AND file_name NOT LIKE ? AND tags NOT LIKE ? AND content_snippet NOT LIKE ?",
+                );
             } else {
                 sql.push_str(" AND (file_name LIKE ? OR tags LIKE ? OR content_snippet LIKE ?)");
             }
@@ -453,9 +724,15 @@ fn get_library(
     if let Some(tags) = &query.tags {
         for tag_item in tags {
             let tag_item = tag_item.trim().to_lowercase();
-            if tag_item.is_empty() { continue; }
+            if tag_item.is_empty() {
+                continue;
+            }
             let is_exclude = tag_item.starts_with('-');
-            let match_tag = if is_exclude { &tag_item[1..] } else { &tag_item };
+            let match_tag = if is_exclude {
+                &tag_item[1..]
+            } else {
+                &tag_item
+            };
             let pattern = format!("%\"{}\"%", match_tag);
 
             if is_exclude {
@@ -469,17 +746,19 @@ fn get_library(
 
     if let Some(d_filter) = &query.date {
         if !d_filter.is_empty() {
-            sql.push_str(" AND strftime('%d.%m.%Y', datetime(last_modified_os, 'unixepoch')) LIKE ?");
+            sql.push_str(
+                " AND strftime('%d.%m.%Y', datetime(last_modified_os, 'unixepoch')) LIKE ?",
+            );
             params_vec.push(format!("%{}%", d_filter));
         }
     }
 
     if let Some(sort_type) = &query.sort {
         match sort_type.as_str() {
-            "name_asc"  => sql.push_str(" ORDER BY LOWER(file_name) ASC"),
+            "name_asc" => sql.push_str(" ORDER BY LOWER(file_name) ASC"),
             "name_desc" => sql.push_str(" ORDER BY LOWER(file_name) DESC"),
             "date_desc" => sql.push_str(" ORDER BY created_at DESC"),
-            "date_asc"  => sql.push_str(" ORDER BY created_at ASC"),
+            "date_asc" => sql.push_str(" ORDER BY created_at ASC"),
             _ => sql.push_str(" ORDER BY created_at DESC"),
         }
     } else {
@@ -491,7 +770,9 @@ fn get_library(
     sql.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
 
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
-    let mut rows = stmt.query(rusqlite::params_from_iter(params_vec)).map_err(|e| e.to_string())?;
+    let mut rows = stmt
+        .query(rusqlite::params_from_iter(params_vec))
+        .map_err(|e| e.to_string())?;
 
     let mut results = Vec::new();
     let lib_path = Path::new(&state.config.library_path);
@@ -501,9 +782,9 @@ fn get_library(
         let kind = match kind_str.as_str() {
             "Image" => AssetKind::Image,
             "Video" => AssetKind::Video,
-            "Text"  => AssetKind::Text,
-            "Code"  => AssetKind::Code,
-            _       => AssetKind::Unknown,
+            "Text" => AssetKind::Text,
+            "Code" => AssetKind::Code,
+            _ => AssetKind::Unknown,
         };
 
         let tags_json: String = row.get(5).unwrap_or("[]".to_string());
@@ -531,7 +812,10 @@ fn get_library(
             height: row.get(8).unwrap_or(0),
             created_at: row.get(9).unwrap_or(0),
             last_modified_os: row.get(10).unwrap_or(0),
-            content_snippet: row.get(11).ok().map(|s: String| s.lines().take(5).collect::<Vec<_>>().join("\n")),
+            content_snippet: row
+                .get(11)
+                .ok()
+                .map(|s: String| s.lines().take(5).collect::<Vec<_>>().join("\n")),
             is_broken: row.get::<_, i32>(12).unwrap_or(0) == 1,
             file_hash: row.get(13).ok(),
         };
@@ -541,9 +825,13 @@ fn get_library(
                 let has_match = dominant_colors.iter().any(|c_hex| {
                     if let Some(rgb2) = hex_to_rgb(c_hex) {
                         color_distance(rgb1, rgb2) < 60.0
-                    } else { false }
+                    } else {
+                        false
+                    }
                 });
-                if !has_match { continue; }
+                if !has_match {
+                    continue;
+                }
             }
         }
 
@@ -556,7 +844,9 @@ fn get_library(
 #[tauri::command]
 fn get_top_tags(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    let mut stmt = conn.prepare("SELECT tags FROM assets").map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT tags FROM assets")
+        .map_err(|e| e.to_string())?;
     let mut rows = stmt.query(()).map_err(|e| e.to_string())?;
 
     let mut counts: HashMap<String, usize> = HashMap::new();
@@ -576,28 +866,51 @@ fn get_top_tags(state: State<'_, AppState>) -> Result<Vec<String>, String> {
 #[tauri::command]
 async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
     let config = state.config.clone();
-    
+
     let assets: Vec<Asset> = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn.prepare("SELECT id, original_path, preview_path, kind, dominant_colors, tags, size_bytes, file_name, extension, last_modified_os, width, height, created_at, content_snippet, is_broken, file_hash FROM assets").map_err(|e| e.to_string())?;
-        let items = stmt.query_map((), |row| {
-            let kind_str: String = row.get(3)?;
-            let kind = match kind_str.as_str() {
-                "Image" => AssetKind::Image, "Video" => AssetKind::Video, "Text" => AssetKind::Text, "Code" => AssetKind::Code, _ => AssetKind::Unknown,
-            };
-            let tags_json: String = row.get(5)?;
-            let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
-            let colors_json: String = row.get(4)?;
-            let dominant_colors: Vec<String> = serde_json::from_str(&colors_json).unwrap_or_default();
+        let items = stmt
+            .query_map((), |row| {
+                let kind_str: String = row.get(3)?;
+                let kind = match kind_str.as_str() {
+                    "Image" => AssetKind::Image,
+                    "Video" => AssetKind::Video,
+                    "Text" => AssetKind::Text,
+                    "Code" => AssetKind::Code,
+                    _ => AssetKind::Unknown,
+                };
+                let tags_json: String = row.get(5)?;
+                let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+                let colors_json: String = row.get(4)?;
+                let dominant_colors: Vec<String> =
+                    serde_json::from_str(&colors_json).unwrap_or_default();
 
-            Ok(Asset {
-                id: row.get(0)?, original_path: row.get(1)?, preview_path: row.get(2)?, kind, dominant_colors, tags,
-                metadata: FileMetadata { size_bytes: row.get(6)?, file_name: row.get(7)?, extension: row.get(8)?, last_modified_os: row.get(9)? },
-                width: row.get(10)?, height: row.get(11)?, created_at: row.get(12)?, content_snippet: row.get(13)?, is_broken: row.get::<_, i32>(14)? == 1,
-                file_hash: row.get(15)?,
+                Ok(Asset {
+                    id: row.get(0)?,
+                    original_path: row.get(1)?,
+                    preview_path: row.get(2)?,
+                    kind,
+                    dominant_colors,
+                    tags,
+                    metadata: FileMetadata {
+                        size_bytes: row.get(6)?,
+                        file_name: row.get(7)?,
+                        extension: row.get(8)?,
+                        last_modified_os: row.get(9)?,
+                    },
+                    width: row.get(10)?,
+                    height: row.get(11)?,
+                    created_at: row.get(12)?,
+                    content_snippet: row.get(13)?,
+                    is_broken: row.get::<_, i32>(14)? == 1,
+                    file_hash: row.get(15)?,
+                })
             })
-        }).map_err(|e| e.to_string())?;
-        items.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())?;
+        items
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
     };
 
     let valid = tokio::task::spawn_blocking(move || {
@@ -608,10 +921,16 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
                     a.metadata = meta;
                 }
                 for tag in a.kind.default_tags() {
-                    if !a.tags.contains(&tag) { a.tags.push(tag); }
+                    if !a.tags.contains(&tag) {
+                        a.tags.push(tag);
+                    }
                 }
                 if a.kind == AssetKind::Image {
-                    let thumb_missing = a.preview_path.as_ref().map(|p| !Path::new(p).exists()).unwrap_or(true);
+                    let thumb_missing = a
+                        .preview_path
+                        .as_ref()
+                        .map(|p| !Path::new(p).exists())
+                        .unwrap_or(true);
                     if thumb_missing {
                         if let Ok(img) = image::open(&a.original_path) {
                             a.preview_path = save_thumbnail(&img, &a.id, &config);
@@ -625,12 +944,15 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
             }
         }
         Ok::<Vec<Asset>, String>(result)
-    }).await.unwrap_or_else(|e| Err(format!("Task panicked: {}", e)))?;
+    })
+    .await
+    .unwrap_or_else(|e| Err(format!("Task panicked: {}", e)))?;
 
     let mut conn = state.db.lock().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    
-    tx.execute("DELETE FROM assets", ()).map_err(|e| e.to_string())?;
+
+    tx.execute("DELETE FROM assets", ())
+        .map_err(|e| e.to_string())?;
     for a in valid {
         let tags_json = serde_json::to_string(&a.tags).unwrap_or_default();
         let color_json = serde_json::to_string(&a.dominant_colors).unwrap_or_default();
@@ -647,7 +969,7 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
         );
     }
     tx.commit().map_err(|e| e.to_string())?;
-    
+
     Ok(())
 }
 
@@ -656,8 +978,12 @@ async fn recalculate_colors(state: State<'_, AppState>) -> Result<usize, String>
     let targets: Vec<(String, String)> = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn.prepare("SELECT id, original_path FROM assets WHERE dominant_colors IS NULL OR dominant_colors = '[]' OR dominant_colors = ''").map_err(|e| e.to_string())?;
-        let rows = stmt.query_map((), |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))).map_err(|e| e.to_string())?;
-        
+        let rows = stmt
+            .query_map((), |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+
         rows.filter_map(|r| r.ok()).collect()
     };
 
@@ -673,14 +999,19 @@ async fn recalculate_colors(state: State<'_, AppState>) -> Result<usize, String>
             }
         }
         updates
-    }).await.map_err(|e| e.to_string())?;
+    })
+    .await
+    .map_err(|e| e.to_string())?;
 
     let updated_count = color_updates.len();
 
     let mut conn = state.db.lock().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     for (id, colors_json) in color_updates {
-        let _ = tx.execute("UPDATE assets SET dominant_colors = ?1 WHERE id = ?2", rusqlite::params![colors_json, id]);
+        let _ = tx.execute(
+            "UPDATE assets SET dominant_colors = ?1 WHERE id = ?2",
+            rusqlite::params![colors_json, id],
+        );
     }
     tx.commit().map_err(|e| e.to_string())?;
 
@@ -691,49 +1022,72 @@ async fn recalculate_colors(state: State<'_, AppState>) -> Result<usize, String>
 async fn update_asset_tags(
     state: State<'_, AppState>,
     id: String,
-    tags: Vec<String>
+    tags: Vec<String>,
 ) -> Result<(), String> {
     let tags_json = serde_json::to_string(&tags).map_err(|e| e.to_string())?;
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    conn.execute("UPDATE assets SET tags = ?1 WHERE id = ?2", params![tags_json, id]).map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE assets SET tags = ?1 WHERE id = ?2",
+        params![tags_json, id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
 async fn delete_asset(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    
-    let preview_path: Option<String> = conn.query_row(
-        "SELECT preview_path FROM assets WHERE id = ?1",
-        params![id],
-        |row| row.get(0)
-    ).ok();
+
+    let preview_path: Option<String> = conn
+        .query_row(
+            "SELECT preview_path FROM assets WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .ok();
 
     if let Some(path) = preview_path {
         let _ = fs::remove_file(path);
     }
 
-    conn.execute("DELETE FROM assets WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM assets WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-async fn rename_asset(state: State<'_, AppState>, id: String, new_name: String) -> Result<(), String> {
+async fn rename_asset(
+    state: State<'_, AppState>,
+    id: String,
+    new_name: String,
+) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    conn.execute("UPDATE assets SET file_name = ?1 WHERE id = ?2", params![new_name, id]).map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE assets SET file_name = ?1 WHERE id = ?2",
+        params![new_name, id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
 async fn open_in_folder(path: String) -> Result<(), String> {
     use std::process::Command;
-    
+
     #[cfg(target_os = "windows")]
-    Command::new("explorer").arg("/select,").arg(&path).spawn().map_err(|e| e.to_string())?;
-    
+    Command::new("explorer")
+        .arg("/select,")
+        .arg(&path)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
     #[cfg(target_os = "macos")]
-    Command::new("open").arg("-R").arg(&path).spawn().map_err(|e| e.to_string())?;
-    
+    Command::new("open")
+        .arg("-R")
+        .arg(&path)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
     #[cfg(target_os = "linux")]
     Command::new("xdg-open")
         .arg(Path::new(&path).parent().unwrap_or(Path::new("/")))
@@ -746,7 +1100,9 @@ async fn open_in_folder(path: String) -> Result<(), String> {
 #[tauri::command]
 async fn read_full_text_file(path: String) -> Result<String, String> {
     use std::io::Read;
-    let mut handle = fs::File::open(&path).map_err(|e| e.to_string())?.take(2 * 1024 * 1024);
+    let mut handle = fs::File::open(&path)
+        .map_err(|e| e.to_string())?
+        .take(2 * 1024 * 1024);
     let mut buffer = Vec::new();
     handle.read_to_end(&mut buffer).map_err(|e| e.to_string())?;
 
@@ -781,7 +1137,7 @@ fn copy_file_to_os_clipboard(path: &str) -> Result<(), String> {
             .args(["-NoProfile", "-Command", &script])
             .output()
             .map_err(|e| e.to_string())?;
-        
+
         if output.status.success() {
             Ok(())
         } else {
@@ -789,10 +1145,9 @@ fn copy_file_to_os_clipboard(path: &str) -> Result<(), String> {
             Err(format!("PowerShell failed: {}", err))
         }
     }
-    
+
     #[cfg(not(target_os = "windows"))]
     {
-        // Fallback for other OS: copy path as text (TODO: implement native file copy for macOS/Linux)
         Err("File copy only supported on Windows for now".to_string())
     }
 }
@@ -806,8 +1161,6 @@ async fn copy_text_to_clipboard(state: State<'_, AppState>, text: String) -> Res
 
 #[tauri::command]
 async fn copy_image_to_clipboard(_state: State<'_, AppState>, path: String) -> Result<(), String> {
-    // Aggressive optimization: Skip all pixel decoding and just copy the file itself.
-    // This is instantaneous and preserves maximum quality for design tools.
     copy_file_to_os_clipboard(&path)
 }
 
@@ -819,15 +1172,20 @@ fn show_window(window: tauri::Window) {
 /// Returns only paths that are NOT already tracked in the library by their original_path.
 /// This is used to silently block internal drag-and-drops (card → app) before the import modal appears.
 #[tauri::command]
-fn filter_known_paths(state: State<'_, AppState>, paths: Vec<String>) -> Result<Vec<String>, String> {
+fn filter_known_paths(
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+) -> Result<Vec<String>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let mut unknown = Vec::new();
     for path in paths {
-        let exists: bool = conn.query_row(
-            "SELECT 1 FROM assets WHERE original_path = ?1 LIMIT 1",
-            rusqlite::params![path],
-            |_| Ok(true)
-        ).unwrap_or(false);
+        let exists: bool = conn
+            .query_row(
+                "SELECT 1 FROM assets WHERE original_path = ?1 LIMIT 1",
+                rusqlite::params![path],
+                |_| Ok(true),
+            )
+            .unwrap_or(false);
         if !exists {
             unknown.push(path);
         }
@@ -857,6 +1215,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             copy_image_to_clipboard,
             copy_text_to_clipboard,
+            copy_to_local_library,
+            prepare_dropped_paths,
+            check_import_paths,
             process_asset,
             get_library,
             recalculate_db,
@@ -877,16 +1238,20 @@ pub fn run() {
 
 fn get_video_dimensions(path: &Path) -> (u32, u32) {
     use std::process::Command;
-    
+
     let path_str = path.to_string_lossy();
-    
+
     let ffprobe_res = Command::new("ffprobe")
         .args(&[
-            "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=width,height",
-            "-of", "csv=s=x:p=0",
-            &path_str
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "csv=s=x:p=0",
+            &path_str,
         ])
         .output();
 
@@ -896,31 +1261,41 @@ fn get_video_dimensions(path: &Path) -> (u32, u32) {
         if dims.len() == 2 {
             let w = dims[0].parse().unwrap_or(0);
             let h = dims[1].parse().unwrap_or(0);
-            if w > 0 && h > 0 { return (w, h); }
+            if w > 0 && h > 0 {
+                return (w, h);
+            }
         }
     }
-    
+
     (1920, 1080)
 }
 
-fn generate_video_thumbnail(video_path: &Path, asset_id: &str, config: &AppConfig) -> Option<String> {
+fn generate_video_thumbnail(
+    video_path: &Path,
+    asset_id: &str,
+    config: &AppConfig,
+) -> Option<String> {
     use std::process::Command;
-    
+
     let thumb_path = Path::new(&config.library_path)
         .join("thumbnails")
         .join(format!("{}.jpg", asset_id));
-        
+
     let video_path_str = video_path.to_string_lossy();
     let thumb_path_str = thumb_path.to_string_lossy();
 
     let res = Command::new("ffmpeg")
         .args(&[
-            "-i", &video_path_str,
-            "-ss", "00:00:01",
-            "-vframes", "1",
-            "-q:v", "2",
+            "-i",
+            &video_path_str,
+            "-ss",
+            "00:00:01",
+            "-vframes",
+            "1",
+            "-q:v",
+            "2",
             "-y",
-            &thumb_path_str
+            &thumb_path_str,
         ])
         .output();
 
