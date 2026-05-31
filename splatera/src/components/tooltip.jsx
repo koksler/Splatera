@@ -19,7 +19,8 @@ export const Tooltip = ({
     children, 
     content, 
     hotkey, 
-    position = 'bottom' 
+    position = 'bottom',
+    disabled = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -57,7 +58,7 @@ export const Tooltip = ({
         ref: mergedRef,
       })}
       
-      {isOpen && (
+      {isOpen && !disabled && (
         <FloatingPortal>
           <div 
             ref={refs.setFloating} 
