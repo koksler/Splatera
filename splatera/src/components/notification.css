@@ -1,49 +1,49 @@
 .splatera-notification {
     position: fixed;
-    top: 122px;
-    left: 50%;
-    
-    transform: translateX(-50%) translateY(-150%);
+    bottom: 10px;
+    left: 10px;
+
+    transform: translateY(calc(100% + 10px));
     opacity: 0;
-    
+
     max-width: 300px;
     background-color: rgba(34, 34, 34, 0.8);
     backdrop-filter: blur(40px);
-    -webkit-backdrop-filter: blur(40px);     
+    -webkit-backdrop-filter: blur(40px);
     border: 1px solid var(--color-border);
     border-radius: 12px;
     padding: 16px 20px;
-    
+
     box-shadow: 0 2px 10px rgba(0,0,0,0.25);
     z-index: 9999;
-    
+
     transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
-    pointer-events: none; 
+    pointer-events: none;
   }
-  
+
   .splatera-notification.show {
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
     opacity: 1;
   }
-  
+
   .notification-title {
     margin: 0 0 4px 0;
     font-size: 16px;
     font-weight: 700;
     color: var(--color-text-main);
   }
-  
+
   .notification-desc {
     margin: 0 0 12px 0;
     font-size: 14px;
     color: var(--color-text-secondary);
   }
-  
-  /* Если у нас нет прогрессбара, убираем отступ от блока с описанием */
+
+  /* No progress bar → remove bottom margin from desc */
   .notification-content:not(:has(.notification-progress-bg)) .notification-desc {
     margin-bottom: 0;
   }
-  
+
   .notification-progress-bg {
     height: 6px;
     width: 100%;
@@ -51,10 +51,27 @@
     border-radius: 99px;
     overflow: hidden;
   }
-  
+
   .notification-progress-fill {
     height: 100%;
     background-color: var(--color-accent);
     border-radius: 99px;
-    transition: width 0.2s ease-out; 
+    transition: width 0.2s ease-out;
+  }
+
+  .notification-undo-btn {
+    margin-top: 8px;
+    background: transparent;
+    border: 1px solid var(--color-accent);
+    color: var(--color-accent);
+    border-radius: 9999px;
+    padding: 3px 12px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    pointer-events: auto;
+  }
+  .notification-undo-btn:hover {
+    background: var(--color-accent);
+    color: var(--color-bg);
   }
