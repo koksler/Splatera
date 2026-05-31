@@ -20,8 +20,8 @@ import Input from './input';
 import Label from './label';
 import './filterMenu.css';
 
-export default function FilterMenu({ 
-  pickerColor, 
+export default function FilterMenu({
+  pickerColor,
   setPickerColor,
   selectedTags,
   setSelectedTags,
@@ -55,7 +55,12 @@ export default function FilterMenu({
 
   const handleTagKeyDown = (e) => {
     if (e.key === 'Enter' && tagInput.trim()) {
-      handleTagClick(tagInput.trim());
+      const trimmed = tagInput.trim().toLowerCase();
+      const parts = trimmed.split(/\s+/);
+      const lastWord = parts[parts.length - 1];
+      if (lastWord) {
+        handleTagClick(lastWord);
+      }
       setTagInput('');
     }
   };
@@ -70,8 +75,6 @@ export default function FilterMenu({
     role,
   ]);
 
-  // Загружаем теги при каждом открытии меню (чтобы они всегда были актуальными)
-  // TODO: Нормальная сортировка (да-да)
   useEffect(() => {
     if (isOpen) {
       const loadTags = async () => {
@@ -79,7 +82,7 @@ export default function FilterMenu({
           const tags = await invoke('get_top_tags');
           setSuggestedTags(tags);
         } catch (error) {
-          console.error("Ошибка при загрузке тегов:", error);
+          console.error("Error loading tags:", error);
         }
       };
       loadTags();
@@ -116,17 +119,17 @@ export default function FilterMenu({
             {...getFloatingProps()}
             className="filter-popover"
           >
-            
+
             <div>
               <div className="filter-section-title">Suggested tags:</div>
               <div className="filter-tags-row" ref={tagsRowRef}>
                 {suggestedTags.length > 0 ? (
                   suggestedTags.map(tag => (
-                    <Label 
-                      key={tag} 
-                      text={tag} 
+                    <Label
+                      key={tag}
+                      text={tag}
                       isActive={selectedTags.includes(tag.toLowerCase())}
-                      onClick={() => handleTagClick(tag)} 
+                      onClick={() => handleTagClick(tag)}
                     />
                   ))
                 ) : (
@@ -139,8 +142,8 @@ export default function FilterMenu({
 
             <div>
               <div className="filter-section-title">Filter by tag</div>
-              <Input 
-                placeholder="Type a tag name" 
+              <Input
+                placeholder="Type a tag name"
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={handleTagKeyDown}
@@ -148,29 +151,29 @@ export default function FilterMenu({
             </div>
 
             <div>
-      <div className="filter-section-title">Filter by Color</div>
-      <div className="filter-color-row">
-        <div style={{ flex: 1 }}>
-          <Input 
-            placeholder="#HEX..." 
-            value={pickerColor}
-            onChange={(e) => setPickerColor(e.target.value)}
-          />
-        </div>
-        <div 
-          className="filter-color-circle" 
-          style={{ backgroundColor: pickerColor }} 
-        />
-      </div>
-      
-      <HexColorPicker color={pickerColor} onChange={setPickerColor} />
-    </div>
+              <div className="filter-section-title">Filter by Color</div>
+              <div className="filter-color-row">
+                <div style={{ flex: 1 }}>
+                  <Input
+                    placeholder="#HEX..."
+                    value={pickerColor}
+                    onChange={(e) => setPickerColor(e.target.value)}
+                  />
+                </div>
+                <div
+                  className="filter-color-circle"
+                  style={{ backgroundColor: pickerColor }}
+                />
+              </div>
+
+              <HexColorPicker color={pickerColor} onChange={setPickerColor} />
+            </div>
 
             {/* 4. Filter by Date */}
             <div>
               <div className="filter-section-title">Enter a Date</div>
-              <Input 
-                placeholder="DD.MM.YYYY" 
+              <Input
+                placeholder="DD.MM.YYYY"
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
               />

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowUpDown, SortAsc, SortDesc, Clock } from 'lucide-react'; // Иконки для сортировки
+import { ArrowUpDown, SortAsc, SortDesc, Clock } from 'lucide-react'; // Icons for sorting
 import {
   useFloating,
   autoUpdate,
@@ -41,7 +41,7 @@ export default function SortMenu({ sortOrder, setSortOrder }) {
     role,
   ]);
 
-  // Функция для смены сортировки
+  // Handler to update the sort order
   const handleSortSelect = (sortType) => {
     setSortOrder(sortType);
     setIsOpen(false);
@@ -63,7 +63,7 @@ export default function SortMenu({ sortOrder, setSortOrder }) {
           >
             <div className="sort-section-title">Sort by</div>
 
-            {/* Опция 1: Дата (Новые сначала) */}
+            {/* Option 1: Date (Newest first) */}
             <Button 
               icon={Clock} 
               text="Newest first" 
@@ -71,7 +71,7 @@ export default function SortMenu({ sortOrder, setSortOrder }) {
               onClick={() => handleSortSelect('date_desc')}
             />
 
-            {/* Опция 2: Имя А-Я */}
+            {/* Option 2: Name (A-Z) */}
             <Button 
               icon={SortAsc} 
               text="Name (A - Z)" 
@@ -79,7 +79,7 @@ export default function SortMenu({ sortOrder, setSortOrder }) {
               onClick={() => handleSortSelect('name_asc')}
             />
 
-            {/* Опция 3: Имя Я-А */}
+            {/* Option 3: Name (Z-A) */}
             <Button 
               icon={SortDesc} 
               text="Name (Z - A)" 

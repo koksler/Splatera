@@ -33,7 +33,7 @@
     animation: slideDownFade 0.2s ease-out forwards;
   }
   
-  /* Левая часть: тексты */
+  /* Left section: labels and info */
   .popup-info {
     display: flex;
     flex-direction: column;
@@ -62,7 +62,7 @@
     line-height: 1;
   }
   
-  /* Правая часть */
+  /* Right section: actions */
   
   .popup-actions {
     display: flex;

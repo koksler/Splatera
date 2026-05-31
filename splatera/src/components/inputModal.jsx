@@ -29,17 +29,21 @@ export default function InputModal({ title, data, onConfirm, onCancel }) {
   };
 
   return (
-    <div className="modal-overlay" onClick={handleOverlayClick}>
+    <div
+      className="modal-overlay"
+      onClick={handleOverlayClick}
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel(); } }}
+    >
       <div className="modal-content">
         
-        {/* ПРЕВЬЮ КАРТИНКИ */}
+        {/* IMAGE PREVIEW */}
         {imgSrc && (
           <div className="modal-preview-wrapper" style={{ marginBottom: '15px' }}>
             <img src={imgSrc} alt="preview" className="modal-preview-img" />
           </div>
         )}
 
-        {/* ПРЕВЬЮ КОДА */}
+        {/* CODE PREVIEW */}
         {isCodeOrText && data.contentSnippet && (
           <div 
             className="modal-preview-wrapper" 

@@ -3,6 +3,7 @@ import { X, Plus } from 'lucide-react';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import Toggle from './toggle';
 import './tagManager.css';
 
 const getLanguage = (ext) => {
@@ -20,7 +21,7 @@ const getAutoTags = (path) => {
   return folder ? [folder] : [];
 };
 
-export default function ImportModal({ paths, onConfirm, onClose }) {
+export default function ImportModal({ paths, hasTemp, onConfirm, onClose }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [confirmed, setConfirmed] = useState([]);
   const [tags, setTags] = useState([]);
@@ -30,6 +31,7 @@ export default function ImportModal({ paths, onConfirm, onClose }) {
   const [previewCode, setPreviewCode] = useState('');
   const [previewExt, setPreviewExt] = useState('');
   const [isVideo, setIsVideo] = useState(false);
+  const [saveLocally, setSaveLocally] = useState(hasTemp);
 
   const currentPath = paths[currentIndex];
   const isLast = currentIndex === paths.length - 1;
@@ -68,7 +70,7 @@ export default function ImportModal({ paths, onConfirm, onClose }) {
 
   const advance = (nextConfirmed) => {
     if (isLast) {
-      onConfirm(nextConfirmed);
+      onConfirm(nextConfirmed, saveLocally);
     } else {
       setConfirmed(nextConfirmed);
       setCurrentIndex(i => i + 1);
@@ -93,14 +95,14 @@ export default function ImportModal({ paths, onConfirm, onClose }) {
       tags: getAutoTags(path),
       batchName: '',
     }));
-    onConfirm([...confirmed, ...remaining]);
+    onConfirm([...confirmed, ...remaining], saveLocally);
   };
 
   return (
     <div className="modal-overlay" onMouseDown={onClose}>
       <div className="modal-content" onMouseDown={(e) => e.stopPropagation()}>
 
-        {/* ПРЕВЬЮ */}
+        {/* PREVIEW */}
         <div className="modal-preview-wrapper" style={{
           backgroundColor: previewCode ? '#1E1E1E' : 'rgba(0,0,0,0.3)',
           alignItems: previewCode ? 'flex-start' : 'center',
@@ -130,7 +132,7 @@ export default function ImportModal({ paths, onConfirm, onClose }) {
           {!previewUrl && !previewCode && <span className="no-tags">No preview available</span>}
         </div>
 
-        {/* СЧЁТЧИК */}
+        {/* COUNTER */}
         <div className="modal-header">
           {isMultiple
             ? `importing ${currentIndex + 1} of ${paths.length}:`
@@ -138,7 +140,7 @@ export default function ImportModal({ paths, onConfirm, onClose }) {
           }
         </div>
 
-        {/* BATCH RENAME — только для множественного импорта */}
+        {/* BATCH RENAME — only for multiple imports */}
         {isMultiple && (
           <div className="tag-input-group">
             <input
@@ -150,7 +152,7 @@ export default function ImportModal({ paths, onConfirm, onClose }) {
           </div>
         )}
 
-        {/* ТЕГИ */}
+        {/* TAGS */}
         <div className="tags-container">
           {tags.length === 0 && <span className="no-tags">No tags attached</span>}
           {tags.map((tag, index) => (
@@ -174,7 +176,16 @@ export default function ImportModal({ paths, onConfirm, onClose }) {
           <button className="tag-add-btn" onClick={handleAddTags}><Plus size={18} /></button>
         </div>
 
-        {/* КНОПКИ */}
+        <div className="import-modal-toggle-row">
+          <Toggle
+            label={hasTemp ? "Save locally (Required for temp files)" : "Save locally"}
+            checked={saveLocally}
+            onChange={setSaveLocally}
+            disabled={hasTemp}
+          />
+        </div>
+
+        {/* BUTTONS */}
         <div className="modal-actions">
           <button className="modal-btn" onClick={onClose}>Cancel</button>
           {isMultiple && (

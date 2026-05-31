@@ -18,7 +18,7 @@ export default function CardPopup({ title, dateText, tags =[], onCopy, onMaximiz
 
       <div className="popup-actions">
         
-        {/* Оборачиваем теги в кликабельный контейнер */}
+        {/* Wrap tags in a clickable container */}
         <div 
            onClick={onManageTags} 
            style={{ display: 'flex', gap: '6px', cursor: 'pointer' }}
