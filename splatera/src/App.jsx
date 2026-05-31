@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useDeferredValue, memo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue, memo } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
@@ -70,7 +70,7 @@ function App() {
   const [tagData, setTagData] = useState(null);
   const [images, setImages] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [notif, setNotif] = useState({ show: false, title: '', desc: '', progress: null });
+  const [notif, setNotif] = useState({ show: false, title: '', desc: '', progress: null, undoId: null });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState([]);
   const [activeFilter, setActiveFilter] = useState(null);
@@ -78,9 +78,11 @@ function App() {
   const [pickerColor, setPickerColor] = useState('#FFD16D');
   const [selectedColor, setSelectedColor] = useState(null);
   const [dateFilter, setDateFilter] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null);
+  // lightboxIndex: index into `images` of the currently open lightbox item
+  const [lightboxIndex, setLightboxIndex] = useState(null);
   const [renameData, setRenameData] = useState(null);
   const [pendingImport, setPendingImport] = useState(null);
+  const [importHasTemp, setImportHasTemp] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [viewMode, setViewMode] = useState('grid');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -92,26 +94,40 @@ function App() {
   const LIMIT = 30;
 
   const notifTimeout = useRef(null);
+  // Undo delete: stores { id, image } for the pending undo window
+  const undoRef = useRef(null);
+  // Always-current ref to images for use inside stale closures (event handlers)
+  const imagesRef = useRef(images);
+  useEffect(() => { imagesRef.current = images; }, [images]);
   const hasLoadedOnce = useRef(false);
 
-  const showTemporaryNotif = (title, desc) => {
+  const showTemporaryNotif = (title, desc, opts = {}) => {
     if (notifTimeout.current) clearTimeout(notifTimeout.current);
-    setNotif({ show: true, title, desc, progress: null });
+    setNotif({ show: true, title, desc, progress: null, undoId: opts.undoId ?? null });
     notifTimeout.current = setTimeout(() => {
       setNotif(prev => ({ ...prev, show: false }));
-    }, 3000);
+      undoRef.current = null;
+    }, opts.duration ?? 3000);
   };
 
-  const handleConfirmImport = async (confirmedFiles) => {
+  const handleConfirmImport = async (confirmedFiles, saveLocally) => {
     setPendingImport(null);
+    setImportHasTemp(false);
     const totalPaths = confirmedFiles.length;
     let totalAssetsProcessed = 0;
 
     setNotif({ show: true, title: 'Processing Assets', desc: `Preparing...`, progress: 0 });
 
     for (let i = 0; i < totalPaths; i++) {
-      const { path, tags, batchName } = confirmedFiles[i];
+      let { path, tags, batchName } = confirmedFiles[i];
       try {
+        if (saveLocally) {
+          try {
+            path = await invoke('copy_to_local_library', { path });
+          } catch (copyErr) {
+            console.error("Failed to copy file locally, falling back to original path:", copyErr);
+          }
+        }
         const assets = await invoke('process_asset', { path });
         for (const assetInfo of assets) {
           totalAssetsProcessed++;
@@ -233,6 +249,37 @@ function App() {
     setTagData(null);
   };
 
+  const startImportFlow = async (filePaths) => {
+    if (!filePaths || filePaths.length === 0) return;
+    try {
+      const prepResult = await invoke('prepare_dropped_paths', { paths: filePaths });
+      const safePaths = prepResult.paths;
+      const hasTemp = prepResult.has_temp;
+      
+      const checkResult = await invoke('check_import_paths', { paths: safePaths });
+      const { allowed_paths, duplicate_paths, duplicate_hashes } = checkResult;
+
+      if (duplicate_paths.length > 0 || duplicate_hashes.length > 0) {
+        let desc = '';
+        if (duplicate_paths.length > 0) {
+          desc += `${duplicate_paths.length} file(s) already in library. `;
+        }
+        if (duplicate_hashes.length > 0) {
+          desc += `${duplicate_hashes.length} duplicate file(s) skipped (same hash).`;
+        }
+        showTemporaryNotif('Duplicates Skipped', desc.trim());
+      }
+
+      if (allowed_paths.length > 0) {
+        setImportHasTemp(hasTemp);
+        setPendingImport(allowed_paths);
+      }
+    } catch (err) {
+      console.error("Import checking failed, fallback to direct import:", err);
+      setPendingImport(filePaths);
+    }
+  };
+
   useEffect(() => {
     invoke('show_window').catch(console.error);
 
@@ -243,11 +290,22 @@ function App() {
     const handleReload = () => setRefreshTrigger(prev => prev + 1);
     const handleRenameModal = (e) => setRenameData(e.detail);
     const handleTagModal = (e) => setTagData(e.detail);
-    const handleOpenLightbox = (e) => setSelectedFile(e.detail);
+    const handleOpenLightbox = (e) => {
+      const idx = imagesRef.current.findIndex(img => img.id === e.detail.id);
+      setLightboxIndex(idx >= 0 ? idx : 0);
+    };
     const handleGlobalNotif = (e) => showTemporaryNotif(e.detail.title, e.detail.desc);
+    // Optimistic delete dispatched from card.jsx
+    const handleOptimisticDelete = (e) => {
+      const { id, image } = e.detail;
+      setImages(prev => prev.filter(img => img.id !== id));
+      undoRef.current = { id, image };
+      showTemporaryNotif('Asset Removed', `"${image.name}" deleted. Undo?`, { undoId: id, duration: 4000 });
+    };
+    window.addEventListener('optimistic-delete', handleOptimisticDelete);
     const handleImportFiles = (e) => {
       const { filePaths } = e.detail;
-      if (filePaths?.length) setPendingImport(filePaths);
+      if (filePaths?.length) startImportFlow(filePaths);
     };
 
     window.addEventListener('reload-library', handleReload);
@@ -263,13 +321,7 @@ function App() {
       setIsDragging(false);
       const filePaths = event.payload.paths;
       if (!filePaths?.length) return;
-      try {
-        const unknown = await invoke('filter_known_paths', { paths: filePaths });
-        if (unknown.length) setPendingImport(unknown);
-      } catch {
-        // fallback: show all if the command fails
-        setPendingImport(filePaths);
-      }
+      startImportFlow(filePaths);
     });
 
     return () => {
@@ -281,6 +333,7 @@ function App() {
       window.removeEventListener('open-lightbox', handleOpenLightbox);
       window.removeEventListener('show-notification', handleGlobalNotif);
       window.removeEventListener('import-files', handleImportFiles);
+      window.removeEventListener('optimistic-delete', handleOptimisticDelete);
       unlistenDragEnter.then(u => u());
       unlistenDragLeave.then(u => u());
       unlistenDrop.then(u => u());
@@ -301,6 +354,22 @@ function App() {
   }, []);
 
   const deferredImages = useDeferredValue(images);
+
+  // Lightbox navigation helpers
+  const openLightbox = (idx) => setLightboxIndex(Math.max(0, Math.min(idx, deferredImages.length - 1)));
+  const closeLightbox = () => setLightboxIndex(null);
+  const lightboxFile = lightboxIndex !== null ? deferredImages[lightboxIndex] : null;
+
+  // Undo delete handler
+  const handleUndo = () => {
+    if (!undoRef.current) return;
+    const { image } = undoRef.current;
+    // Re-insert at head (it was the most-recently deleted)
+    setImages(prev => [image, ...prev]);
+    undoRef.current = null;
+    if (notifTimeout.current) clearTimeout(notifTimeout.current);
+    setNotif(prev => ({ ...prev, show: false }));
+  };
 
   return (
     <div className={`app-container ${isDragging ? 'dragging' : ''}`}>
@@ -328,6 +397,8 @@ function App() {
         title={notif.title}
         description={notif.desc}
         progress={notif.progress}
+        undoId={notif.undoId}
+        onUndo={handleUndo}
       />
 
       <div className="content-container">
@@ -338,7 +409,7 @@ function App() {
         ) : deferredImages.length === 0 ? (
           <div className="empty-state">
             <h2>Drop to stash</h2>
-            <p>Перетащи сюда картинки</p>
+            <p>Drop your images here</p>
           </div>
         ) : (
           <LibraryGrid
@@ -347,6 +418,7 @@ function App() {
             viewMode={viewMode}
             loadMore={loadMore}
             hasMore={hasMore}
+            onOpenLightbox={openLightbox}
           />
         )}
       </div>
@@ -367,12 +439,23 @@ function App() {
         />
       )}
       {isDragging && <DropOverlay />}
-      {selectedFile && <Lightbox file={selectedFile} onClose={() => setSelectedFile(null)} />}
+      {lightboxFile && (
+        <Lightbox
+          file={lightboxFile}
+          onClose={closeLightbox}
+          onPrev={lightboxIndex > 0 ? () => openLightbox(lightboxIndex - 1) : null}
+          onNext={lightboxIndex < deferredImages.length - 1 ? () => openLightbox(lightboxIndex + 1) : null}
+        />
+      )}
       {pendingImport && (
         <ImportModal
           paths={pendingImport}
+          hasTemp={importHasTemp}
           onConfirm={handleConfirmImport}
-          onClose={() => setPendingImport(null)}
+          onClose={() => {
+            setPendingImport(null);
+            setImportHasTemp(false);
+          }}
         />
       )}
     </div>
@@ -435,54 +518,38 @@ const useJustifiedPositioner = ({ width, items, gutter = 15, targetHeight = 280 
 
 // ─── LibraryGrid ─────────────────────────────────────────────────────────────
 
-const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore }) => {
+const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore, onOpenLightbox }) => {
   const containerRef = useRef(null);
-  const headerRef = useRef(null);
   const resizeTimer = useRef(null);
   const loaderRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(window.innerWidth);
+  const [viewportHeight, setViewportHeight] = useState(window.innerHeight);
 
   useEffect(() => {
     if (!loadMore || !hasMore) return;
-
     const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          loadMore();
-        }
-      },
-      { rootMargin: '200px' } // Load more before we actually hit the bottom
+      (entries) => { if (entries[0].isIntersecting) loadMore(); },
+      { rootMargin: '200px' }
     );
-
-    if (loaderRef.current) {
-      observer.observe(loaderRef.current);
-    }
-
+    if (loaderRef.current) observer.observe(loaderRef.current);
     return () => observer.disconnect();
   }, [loadMore, hasMore, items.length]);
 
   useEffect(() => {
-    headerRef.current = document.querySelector('.splatera-header');
     const wrapper = containerRef.current;
     let lastWidth = window.innerWidth;
-
     let rafId;
+
     const observer = new ResizeObserver(([entry]) => {
       if (rafId) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
         const newWidth = entry.contentRect.width;
-
-        // ONLY trigger resizing logic if the WIDTH changed.
-        // Ignore height changes from search/filter.
         if (Math.abs(newWidth - lastWidth) > 1) {
           if (wrapper && !wrapper.classList.contains('is-resizing')) {
             wrapper.classList.add('is-resizing');
           }
           if (resizeTimer.current) clearTimeout(resizeTimer.current);
-          resizeTimer.current = setTimeout(() => {
-            wrapper?.classList.remove('is-resizing');
-          }, 120);
-
+          resizeTimer.current = setTimeout(() => wrapper?.classList.remove('is-resizing'), 120);
           lastWidth = newWidth;
           setContainerWidth(newWidth);
         }
@@ -490,37 +557,27 @@ const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore }
     });
     if (wrapper) observer.observe(wrapper);
 
+    // Track viewport height for correct MasonryScroller virtualization
+    const handleResize = () => setViewportHeight(window.innerHeight);
+    window.addEventListener('resize', handleResize, { passive: true });
+
     let debounceTimer = null;
     let unlistenResize = null;
     getCurrentWindow().onResized(() => {
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
-        invoke('recalculate_db').catch(err => console.error("recalculate_db failed:", err));
+        invoke('recalculate_db').catch(err => console.error('recalculate_db failed:', err));
       }, 500);
-    }).then(u => { unlistenResize = u; }).catch(() => { });
+    }).then(u => { unlistenResize = u; }).catch(() => {});
 
     return () => {
       observer.disconnect();
+      window.removeEventListener('resize', handleResize);
       if (rafId) cancelAnimationFrame(rafId);
       if (debounceTimer) clearTimeout(debounceTimer);
       if (resizeTimer.current) clearTimeout(resizeTimer.current);
       unlistenResize?.();
     };
-  }, []);
-
-  useEffect(() => {
-    let scrollTimeout;
-    const handleScroll = () => {
-      if (headerRef.current?.hasAttribute('data-tauri-drag-region')) {
-        headerRef.current.removeAttribute('data-tauri-drag-region');
-      }
-      if (scrollTimeout) clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(() => {
-        headerRef.current?.setAttribute('data-tauri-drag-region', '');
-      }, 150);
-    };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const minColumnWidth = 320;
@@ -543,6 +600,12 @@ const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore }
   const activePositioner = viewMode === 'horizontal' ? justifiedPositioner : positioner;
   positionerRef.current = activePositioner;
 
+  // Pass onOpenLightbox to each card via render prop
+  const renderCard = useCallback(
+    (props) => <Card {...props} onOpenLightbox={onOpenLightbox} />,
+    [onOpenLightbox]
+  );
+
   return (
     <div ref={containerRef} className="masonry-wrapper" style={{ minHeight: '100vh', width: '100%' }}>
       <div style={{ width: containerWidth, margin: '0 auto' }}>
@@ -554,9 +617,9 @@ const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore }
               items={items}
               overscanBy={2}
               itemAs={ItemWrapper}
-              render={Card}
+              render={renderCard}
               itemKey={(data) => data.id}
-              height={window.innerHeight}
+              height={viewportHeight}
             />
           </ErrorBoundary>
         )}
