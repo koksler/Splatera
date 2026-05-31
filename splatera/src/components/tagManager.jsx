@@ -36,7 +36,7 @@ export default function TagManager({ data, onSave, onClose }) {
     if (!inputValue.trim()) return;
     const newTags = inputValue
       .split(',')
-      .map(t => t.trim()) // Сохраняем как есть, форматирование применится при рендере
+      .map(t => t.trim()) // Keep raw, formatting is applied during render
       .filter(t => t.length > 0);
 
     const uniqueTags = [...new Set([...tags, ...newTags])];
@@ -52,10 +52,14 @@ export default function TagManager({ data, onSave, onClose }) {
   };
 
   return (
-    <div className="modal-overlay" onMouseDown={onClose}>
+    <div
+      className="modal-overlay"
+      onMouseDown={onClose}
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}
+    >
       <div className="modal-content" onMouseDown={(e) => e.stopPropagation()}>
 
-      {/* Блок превьюхи */}
+      {/* Preview Block */}
       {imgSrc && (
           <div className="modal-preview-wrapper">
             <img src={imgSrc} alt="preview" className="modal-preview-img" />
@@ -90,7 +94,7 @@ export default function TagManager({ data, onSave, onClose }) {
           </div>
         )}
 
-        {/* Если нет ни картинки, ни кода (сломанный файл) */}
+        {/* Fallback for files without preview or code snippet */}
         {!imgSrc && !isCodeOrText && (
           <div className="modal-preview-wrapper">
             <span style={{ color: '#616161', fontFamily: 'monospace' }}>No preview</span>
@@ -105,7 +109,7 @@ export default function TagManager({ data, onSave, onClose }) {
           {tags.length === 0 && <span className="no-tags">No tags attached</span>}
           {tags.map((tag, index) => (
             <div key={index} className="tag-item">
-              {/* Применяем форматирование для красоты */}
+              {/* Apply formatting */}
               <span className="tag-text">{formatTag(tag)}</span>
               <button className="tag-remove-btn" onClick={() => handleRemoveTag(tag)}>
                 <X size={14} />
@@ -115,12 +119,13 @@ export default function TagManager({ data, onSave, onClose }) {
         </div>
 
         <div className="tag-input-group">
-          <input 
-            type="text" 
-            placeholder="new tags (comma separated)..." 
+          <input
+            type="text"
+            placeholder="new tags (comma separated)..."
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
+            autoFocus
           />
           <button className="tag-add-btn" onClick={handleAddTags}>
             <Plus size={18} />
