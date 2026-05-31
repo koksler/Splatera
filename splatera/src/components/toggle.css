@@ -1,0 +1,56 @@
+.splatera-toggle-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--color-text-main);
+  padding: 4px 0;
+  transition: opacity 0.2s ease;
+}
+
+.splatera-toggle-wrapper:hover:not(.disabled) {
+  opacity: 0.9;
+}
+
+.splatera-toggle-wrapper.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.splatera-toggle-track {
+  width: 50px;
+  height: 25px;
+  background-color: var(--color-surface);
+  border: 1.5px solid var(--color-text-secondary);
+  border-radius: 999px;
+  position: relative;
+  transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.splatera-toggle-track.active {
+  background-color: var(--color-accent);
+  border-color: var(--color-surface);
+}
+
+.splatera-toggle-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 3px solid var(--color-text-button);
+  background-color: transparent;
+  position: absolute;
+  top: 1px;
+  left: 1.5px;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.splatera-toggle-thumb.active {
+  transform: translateX(24px);
+  border-color: var(--color-surface);
+}
