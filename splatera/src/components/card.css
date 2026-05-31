@@ -4,7 +4,8 @@
   border: 1px solid transparent;
   border-radius: 12px;
   overflow: hidden;
-  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  /* Only composite transform — no paint-triggering properties */
+  transition: transform 0.2s ease;
   user-select: none;
   cursor: grab;
   /* GPU acceleration hint */
@@ -14,11 +15,13 @@
 
   /* High-performance offloading */
   content-visibility: auto;
-  contain-intrinsic-size: auto 280px; /* targetHeight from justified positioner */
+  contain-intrinsic-size: auto 280px;
 }
 
 .splatera-card:hover {
   border-color: var(--color-accent);
+  /* Promote to its own GPU layer only when hovering */
+  will-change: transform;
 }
 
 .splatera-card img {

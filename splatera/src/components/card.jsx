@@ -36,7 +36,7 @@ const notify = (title, desc) => {
 };
 
 export default memo(Card);
-function Card({ data }) {
+function Card({ data, index, onOpenLightbox }) {
   const videoRef = useRef(null);
   const hoverTimeout = useRef(null);
   const showImageTimer = useRef(null);
@@ -117,6 +117,14 @@ function Card({ data }) {
     setMenuData({ open: true, x: e.clientX, y: e.clientY });
   };
 
+  const handleDoubleClick = () => {
+    if (onOpenLightbox && typeof index === 'number') {
+      onOpenLightbox(index);
+    } else {
+      window.dispatchEvent(new CustomEvent('open-lightbox', { detail: data }));
+    }
+  };
+
   const handleCopy = () => {
     const assetType = isCodeOrText ? 'Text' : (isVideo ? 'File' : 'Image');
     const msg = `${assetType} Copied`;
@@ -149,11 +157,14 @@ function Card({ data }) {
         break;
       case 'delete':
         try {
+          // Optimistic: remove from UI immediately, let App handle undo
+          window.dispatchEvent(new CustomEvent('optimistic-delete', { detail: { id: data.id, image: data } }));
           await invoke('delete_asset', { id: data.id });
-          window.dispatchEvent(new CustomEvent('reload-library'));
-          notify('Asset Removed', `"${data.name}" has been deleted.`);
         } catch (err) {
           console.error('Failed to delete:', err);
+          // Re-add via reload if actual delete failed
+          window.dispatchEvent(new CustomEvent('reload-library'));
+          notify('Delete Failed', `Could not delete "${data.name}".`);
         }
         break;
       default:
@@ -170,6 +181,7 @@ function Card({ data }) {
       onContextMenu={handleContextMenu}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onDoubleClick={handleDoubleClick}
     >
       {data.isBroken && (
         <div className="broken-overlay">
