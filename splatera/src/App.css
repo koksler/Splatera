@@ -67,7 +67,8 @@ body, html {
 }
 
 .content-container {
-  padding: 0 15px 20px 15px; 
+  padding: 0 15px 20px 15px;
+  margin-top: 20px;
 }
 
 .empty-state {
