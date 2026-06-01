@@ -30,20 +30,11 @@
   }
   
   .splatera-label.inactive {
-    border-color: #3e3e3e;
+    opacity: 0.2;
   }
   
-  .splatera-label.inactive::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    z-index: 1; 
-    transition: background-color 0.1s ease;
-  }
-  
-  .splatera-label.inactive:hover::after {
-    background-color: rgba(0, 0, 0, 0.1);
+  .splatera-label.inactive:hover {
+    opacity: 0.6;
   }
   
   .splatera-label:active {

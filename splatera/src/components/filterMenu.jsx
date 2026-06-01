@@ -16,7 +16,7 @@ import {
 } from '@floating-ui/react';
 
 import Button from './button';
-import Input from './input';
+import TextField from './textField';
 import Label from './label';
 import './filterMenu.css';
 
@@ -142,7 +142,7 @@ export default function FilterMenu({
 
             <div>
               <div className="filter-section-title">Filter by tag</div>
-              <Input
+              <TextField
                 placeholder="Type a tag name"
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
@@ -154,8 +154,8 @@ export default function FilterMenu({
               <div className="filter-section-title">Filter by Color</div>
               <div className="filter-color-row">
                 <div style={{ flex: 1 }}>
-                  <Input
-                    placeholder="#HEX..."
+                  <TextField
+                    placeholder="Type a HEX code"
                     value={pickerColor}
                     onChange={(e) => setPickerColor(e.target.value)}
                   />
@@ -172,8 +172,8 @@ export default function FilterMenu({
             {/* 4. Filter by Date */}
             <div>
               <div className="filter-section-title">Enter a Date</div>
-              <Input
-                placeholder="DD.MM.YYYY"
+              <TextField
+                placeholder="Type a date or period"
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
               />
