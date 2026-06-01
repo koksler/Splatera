@@ -177,6 +177,10 @@
 
 /* ---- Small: stack into two rows (minimized layout) ---- */
 @media (max-width: 1050px) {
+  .splatera-header {
+    padding: 10px;
+  }
+
   .splatera-header-card {
     display: grid;
     grid-template-columns: auto 1fr;
