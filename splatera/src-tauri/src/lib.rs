@@ -1131,12 +1131,13 @@ fn copy_file_to_os_clipboard(path: &str) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use std::process::Command;
+        use std::os::windows::process::CommandExt;
         // PowerShell command to copy a file to the clipboard (as a file/HDROP, not text)
         let script = format!("Set-Clipboard -Path '{}'", path.replace("'", "''"));
-        let output = Command::new("powershell")
-            .args(["-NoProfile", "-Command", &script])
-            .output()
-            .map_err(|e| e.to_string())?;
+        let mut cmd = Command::new("powershell");
+        cmd.args(["-NoProfile", "-Command", &script]);
+        cmd.creation_flags(0x08000000);
+        let output = cmd.output().map_err(|e| e.to_string())?;
 
         if output.status.success() {
             Ok(())
@@ -1193,6 +1194,26 @@ fn filter_known_paths(
     Ok(unknown)
 }
 
+#[tauri::command]
+async fn clear_library(state: State<'_, AppState>) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM assets", ()).map_err(|e| e.to_string())?;
+
+    let thumbnails_dir = Path::new(&state.config.library_path).join("thumbnails");
+    if thumbnails_dir.exists() {
+        let _ = fs::remove_dir_all(&thumbnails_dir);
+        let _ = fs::create_dir_all(&thumbnails_dir);
+    }
+
+    let local_dir = Path::new(&state.config.library_path).join("local");
+    if local_dir.exists() {
+        let _ = fs::remove_dir_all(&local_dir);
+        let _ = fs::create_dir_all(&local_dir);
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1231,6 +1252,7 @@ pub fn run() {
             resolve_path,
             show_window,
             filter_known_paths,
+            clear_library,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1238,22 +1260,27 @@ pub fn run() {
 
 fn get_video_dimensions(path: &Path) -> (u32, u32) {
     use std::process::Command;
+    #[cfg(target_os = "windows")]
+    use std::os::windows::process::CommandExt;
 
     let path_str = path.to_string_lossy();
 
-    let ffprobe_res = Command::new("ffprobe")
-        .args(&[
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=width,height",
-            "-of",
-            "csv=s=x:p=0",
-            &path_str,
-        ])
-        .output();
+    let mut cmd = Command::new("ffprobe");
+    cmd.args(&[
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-of",
+        "csv=s=x:p=0",
+        &path_str,
+    ]);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
+
+    let ffprobe_res = cmd.output();
 
     if let Ok(output) = ffprobe_res {
         let s = String::from_utf8_lossy(&output.stdout);
@@ -1276,6 +1303,8 @@ fn generate_video_thumbnail(
     config: &AppConfig,
 ) -> Option<String> {
     use std::process::Command;
+    #[cfg(target_os = "windows")]
+    use std::os::windows::process::CommandExt;
 
     let thumb_path = Path::new(&config.library_path)
         .join("thumbnails")
@@ -1284,20 +1313,23 @@ fn generate_video_thumbnail(
     let video_path_str = video_path.to_string_lossy();
     let thumb_path_str = thumb_path.to_string_lossy();
 
-    let res = Command::new("ffmpeg")
-        .args(&[
-            "-i",
-            &video_path_str,
-            "-ss",
-            "00:00:01",
-            "-vframes",
-            "1",
-            "-q:v",
-            "2",
-            "-y",
-            &thumb_path_str,
-        ])
-        .output();
+    let mut cmd = Command::new("ffmpeg");
+    cmd.args(&[
+        "-i",
+        &video_path_str,
+        "-ss",
+        "00:00:01",
+        "-vframes",
+        "1",
+        "-q:v",
+        "2",
+        "-y",
+        &thumb_path_str,
+    ]);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
+
+    let res = cmd.output();
 
     if res.is_ok() && thumb_path.exists() {
         Some(thumb_path.to_string_lossy().into_owned())
