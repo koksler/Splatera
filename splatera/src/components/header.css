@@ -1,15 +1,10 @@
-/* =========================================================
-   SPLATERA HEADER
-   Floaty card layout: sticky top bar with glassmorphism card
-   ========================================================= */
-
 .splatera-header {
   position: sticky;
   top: 0;
   z-index: 50;
   width: 100%;
   /* 10px top margin + 12px sides. Bottom margin lives on .content-container */
-  padding: 10px 12px 0 12px;
+  padding: 10px 20px 0 20px;
   box-sizing: border-box;
 }
 
@@ -25,7 +20,7 @@
   background-color: rgba(34, 34, 34, 0.8);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
-  border-radius: 12px;
+  border-radius: 10px;
   border: none;
   position: relative;
 }
