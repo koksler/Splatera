@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowUpDown, SortAsc, SortDesc, Clock } from 'lucide-react'; // Icons for sorting
+import { ArrowUpDown } from 'lucide-react'; // Icon for sort button
 import {
   useFloating,
   autoUpdate,
@@ -14,6 +14,7 @@ import {
 } from '@floating-ui/react';
 
 import Button from './button';
+import Radio from './radio';
 import './sortMenu.css';
 
 export default function SortMenu({ sortOrder, setSortOrder }) {
@@ -44,7 +45,6 @@ export default function SortMenu({ sortOrder, setSortOrder }) {
   // Handler to update the sort order
   const handleSortSelect = (sortType) => {
     setSortOrder(sortType);
-    setIsOpen(false);
   };
 
   return (
@@ -61,31 +61,32 @@ export default function SortMenu({ sortOrder, setSortOrder }) {
             {...getFloatingProps()}
             className="sort-popover"
           >
-            <div className="sort-section-title">Sort by</div>
+            {/* Option 1: Newest first */}
+            <div className="sort-option-row">
+              <span>Newest first</span>
+              <Radio 
+                checked={sortOrder === 'date_desc'} 
+                onClick={() => handleSortSelect('date_desc')}
+              />
+            </div>
 
-            {/* Option 1: Date (Newest first) */}
-            <Button 
-              icon={Clock} 
-              text="Newest first" 
-              className={`sort-option-btn ${sortOrder === 'date_desc' ? 'active' : ''}`}
-              onClick={() => handleSortSelect('date_desc')}
-            />
+            {/* Option 2: Ascending by Name */}
+            <div className="sort-option-row">
+              <span>Ascending by Name</span>
+              <Radio 
+                checked={sortOrder === 'name_asc'} 
+                onClick={() => handleSortSelect('name_asc')}
+              />
+            </div>
 
-            {/* Option 2: Name (A-Z) */}
-            <Button 
-              icon={SortAsc} 
-              text="Name (A - Z)" 
-              className={`sort-option-btn ${sortOrder === 'name_asc'  ? 'active' : ''}`}
-              onClick={() => handleSortSelect('name_asc')}
-            />
-
-            {/* Option 3: Name (Z-A) */}
-            <Button 
-              icon={SortDesc} 
-              text="Name (Z - A)" 
-              className={`sort-option-btn ${sortOrder === 'name_desc' ? 'active' : ''}`}
-              onClick={() => handleSortSelect('name_desc')}
-            />
+            {/* Option 3: Descending by Name */}
+            <div className="sort-option-row">
+              <span>Descending by Name</span>
+              <Radio 
+                checked={sortOrder === 'name_desc'} 
+                onClick={() => handleSortSelect('name_desc')}
+              />
+            </div>
             
           </div>
         </FloatingFocusManager>
