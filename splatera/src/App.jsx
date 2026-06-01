@@ -255,7 +255,7 @@ function App() {
       const prepResult = await invoke('prepare_dropped_paths', { paths: filePaths });
       const safePaths = prepResult.paths;
       const hasTemp = prepResult.has_temp;
-      
+
       const checkResult = await invoke('check_import_paths', { paths: safePaths });
       const { allowed_paths, duplicate_paths, duplicate_hashes } = checkResult;
 
@@ -371,6 +371,20 @@ function App() {
     setNotif(prev => ({ ...prev, show: false }));
   };
 
+  const isSearchActive = searchQuery.trim() !== '' ||
+    selectedTags.length > 0 ||
+    selectedColor !== null ||
+    dateFilter.trim() !== '' ||
+    (activeFilter !== null && activeFilter !== '');
+
+  const emptyStateContent = isSearchActive ? {
+    title: "Oh.\nQuery yielded no results.",
+    desc: "Maybe some tags got messed up, or you\ncould've skipped a letter. Or it's a bug."
+  } : {
+    title: "Oh, right.\nThe database is empty.",
+    desc: "You can always fix it by importing something\nOr just drag & drop it into application"
+  };
+
   return (
     <div className={`app-container ${isDragging ? 'dragging' : ''}`}>
       <Header
@@ -408,8 +422,10 @@ function App() {
           </ErrorBoundary>
         ) : deferredImages.length === 0 ? (
           <div className="empty-state">
-            <h2>Drop to stash</h2>
-            <p>Drop your images here</p>
+            <div className="empty-state-smile">:(</div>
+            <div className="empty-state-title">{emptyStateContent.title}</div>
+            <div className="empty-state-desc">{emptyStateContent.desc}</div>
+            <div className="empty-state-code">APP-ER-404</div>
           </div>
         ) : (
           <LibraryGrid
@@ -568,7 +584,7 @@ const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore, 
       debounceTimer = setTimeout(() => {
         invoke('recalculate_db').catch(err => console.error('recalculate_db failed:', err));
       }, 500);
-    }).then(u => { unlistenResize = u; }).catch(() => {});
+    }).then(u => { unlistenResize = u; }).catch(() => { });
 
     return () => {
       observer.disconnect();
