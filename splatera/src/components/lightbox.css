@@ -31,7 +31,6 @@
     max-height: 85vh;
     object-fit: contain;
     border-radius: 4px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
     will-change: transform; 
   }
   
@@ -57,7 +56,6 @@
   background-color: #1e1e1e;
   border-radius: 8px;
   overflow: auto;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
   pointer-events: auto;
   text-align: left;
 }
@@ -91,7 +89,6 @@
   max-width: 85vw;
   max-height: 85vh;
   border-radius: 8px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
   object-fit: contain;
   outline: none;
 }
