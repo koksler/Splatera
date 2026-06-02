@@ -1214,6 +1214,21 @@ async fn clear_library(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn save_settings(state: State<'_, AppState>, settings: String) -> Result<(), String> {
+    let settings_path = Path::new(&state.config.library_path).join("settings.json");
+    fs::write(settings_path, settings).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn load_settings(state: State<'_, AppState>) -> Result<String, String> {
+    let settings_path = Path::new(&state.config.library_path).join("settings.json");
+    if !settings_path.exists() {
+        return Ok("{}".to_string());
+    }
+    fs::read_to_string(settings_path).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1253,6 +1268,8 @@ pub fn run() {
             show_window,
             filter_known_paths,
             clear_library,
+            save_settings,
+            load_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
