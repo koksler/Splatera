@@ -42,15 +42,33 @@
   height: 20px;
   border-radius: 50%;
   border: 3px solid var(--color-text-button);
-  background-color: transparent;
+  background-color: var(--color-surface);
   position: absolute;
-  top: 1px;
+  top: 1.5px;
   left: 1.5px;
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease, background-color 0.2s ease;
   box-sizing: border-box;
 }
 
 .splatera-toggle-thumb.active {
   transform: translateX(24px);
   border-color: var(--color-surface);
+  background-color: var(--color-accent);
+}
+
+.splatera-toggle-line {
+  position: absolute;
+  top: 50%;
+  left: 35.5px;
+  transform: translate(-50%, -50%);
+  width: 1px;
+  height: 8px;
+  background-color: var(--color-text-secondary);
+  transition: left 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease;
+  pointer-events: none;
+}
+
+.splatera-toggle-line.active {
+  left: 11.5px;
+  background-color: var(--color-surface);
 }
