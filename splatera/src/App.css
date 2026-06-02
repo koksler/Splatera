@@ -23,7 +23,7 @@
 
 ::-webkit-scrollbar-track {
   background-color: transparent;
-  margin-top: 160px !important;
+  margin-top: var(--scrollbar-track-margin-top, 160px) !important;
   margin-bottom: 20px;
 }
 

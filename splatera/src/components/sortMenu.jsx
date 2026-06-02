@@ -17,7 +17,7 @@ import Button from './button';
 import Radio from './radio';
 import './sortMenu.css';
 
-export default function SortMenu({ sortOrder, setSortOrder }) {
+export default function SortMenu({ sortOrder, setSortOrder, snapHeader }) {
   const [isOpen, setIsOpen] = useState(false);
 
   const { refs, floatingStyles, context } = useFloating({
@@ -26,7 +26,16 @@ export default function SortMenu({ sortOrder, setSortOrder }) {
     placement: 'bottom-end',
     whileElementsMounted: autoUpdate,
     middleware: [
-      offset(10),
+      offset(({ rects }) => {
+        const headerEl = document.querySelector('.splatera-header');
+        const buttonEl = refs.reference.current;
+        if (headerEl && buttonEl && headerEl.contains(buttonEl)) {
+          const headerRect = headerEl.getBoundingClientRect();
+          const buttonRect = buttonEl.getBoundingClientRect();
+          return (headerRect.bottom - buttonRect.bottom) + 10;
+        }
+        return snapHeader ? 30 : 20;
+      }),
       flip(),
       shift({ padding: 12 }),
     ],

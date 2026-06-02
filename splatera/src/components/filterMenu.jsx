@@ -40,7 +40,16 @@ export default function FilterMenu({
     placement: 'bottom-end',
     whileElementsMounted: autoUpdate,
     middleware: [
-      offset(10),
+      offset(({ rects }) => {
+        const headerEl = document.querySelector('.splatera-header');
+        const buttonEl = refs.reference.current;
+        if (headerEl && buttonEl && headerEl.contains(buttonEl)) {
+          const headerRect = headerEl.getBoundingClientRect();
+          const buttonRect = buttonEl.getBoundingClientRect();
+          return (headerRect.bottom - buttonRect.bottom) + 10;
+        }
+        return 10;
+      }),
       flip(),
       shift({ padding: 12 }),
     ],

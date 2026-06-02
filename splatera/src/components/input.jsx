@@ -43,7 +43,16 @@ const Input = React.forwardRef(({
     placement: 'bottom-end',
     whileElementsMounted: autoUpdate,
     middleware: [
-      offset(10),
+      offset(({ rects }) => {
+        const headerEl = document.querySelector('.splatera-header');
+        const refEl = refs.reference.current;
+        if (headerEl && refEl && headerEl.contains(refEl)) {
+          const headerRect = headerEl.getBoundingClientRect();
+          const refRect = refEl.getBoundingClientRect();
+          return (headerRect.bottom - refRect.bottom) + 10;
+        }
+        return 10;
+      }),
       flip(),
       shift({ padding: 10 }),
     ],

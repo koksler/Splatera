@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, DatabaseZap, Play } from 'lucide-react';
+import { Settings, DatabaseZap, Play, Trash2 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import {
   useFloating,
@@ -14,9 +14,16 @@ import {
   FloatingFocusManager,
 } from '@floating-ui/react';
 import Button from './button';
+import Toggle from './toggle';
 import './settingsMenu.css';
 
-export default function SettingsMenu({ onDbUpdated, viewMode, setViewMode }) {
+export default function SettingsMenu({
+  onDbUpdated,
+  viewMode,
+  setViewMode,
+  snapHeader,
+  onSnapHeaderChange,
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [autoplay, setAutoplay] = useState(false);
 
@@ -26,7 +33,16 @@ export default function SettingsMenu({ onDbUpdated, viewMode, setViewMode }) {
     placement: 'bottom-end',
     whileElementsMounted: autoUpdate,
     middleware: [
-      offset(10),
+      offset(({ rects }) => {
+        const headerEl = document.querySelector('.splatera-header');
+        const buttonEl = refs.reference.current;
+        if (headerEl && buttonEl && headerEl.contains(buttonEl)) {
+          const headerRect = headerEl.getBoundingClientRect();
+          const buttonRect = buttonEl.getBoundingClientRect();
+          return (headerRect.bottom - buttonRect.bottom) + 10;
+        }
+        return 10;
+      }),
       flip(),
       shift({ padding: 10 }),
     ],
@@ -61,7 +77,18 @@ export default function SettingsMenu({ onDbUpdated, viewMode, setViewMode }) {
     window.dispatchEvent(new CustomEvent('set-autoplay-videos', { detail: next }));
   };
 
-
+  const handleClearLibrary = async () => {
+    try {
+      await invoke('clear_library');
+      window.dispatchEvent(new CustomEvent('reload-library'));
+      window.dispatchEvent(new CustomEvent('show-notification', {
+        detail: { title: 'Library Cleared', desc: 'All files removed from the library.' }
+      }));
+      setIsOpen(false);
+    } catch (error) {
+      console.error("Error clearing library:", error);
+    }
+  };
 
   return (
     <>
@@ -79,14 +106,18 @@ export default function SettingsMenu({ onDbUpdated, viewMode, setViewMode }) {
           >
             <div className="settings-label">App Settings</div>
 
+            <Toggle
+              label="Snap header"
+              checked={snapHeader}
+              onChange={onSnapHeaderChange}
+            />
+
             <Button
               icon={DatabaseZap}
               text="Recalculate DB"
               onClick={handleRecalculate}
               className="settings-action-btn"
             />
-
-
 
             <Button
               text={viewMode === 'grid' ? "Switch to Horizontal View" : "Switch to Vertical View"}
@@ -103,6 +134,13 @@ export default function SettingsMenu({ onDbUpdated, viewMode, setViewMode }) {
               text="Autoplay all videos"
               onClick={handleToggleAutoplay}
               className={`settings-action-btn${autoplay ? ' settings-btn-active' : ''}`}
+            />
+
+            <Button
+              icon={Trash2}
+              text="Remove all files from lib"
+              onClick={handleClearLibrary}
+              className="settings-action-btn settings-danger-btn"
             />
           </div>
         </FloatingFocusManager>

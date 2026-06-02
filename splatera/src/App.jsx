@@ -86,6 +86,8 @@ function App() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [viewMode, setViewMode] = useState('grid');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [snapHeader, setSnapHeader] = useState(false);
+  const settingsRef = useRef({});
 
   // Pagination state
   const [offset, setOffset] = useState(0);
@@ -283,6 +285,23 @@ function App() {
   useEffect(() => {
     invoke('show_window').catch(console.error);
 
+    // Load settings from settings.json
+    invoke('load_settings')
+      .then((settingsStr) => {
+        try {
+          const settings = JSON.parse(settingsStr);
+          settingsRef.current = settings;
+          if (settings.snapHeader !== undefined) {
+            setSnapHeader(settings.snapHeader);
+          }
+        } catch (e) {
+          console.error("Failed to parse settings.json", e);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load settings", err);
+      });
+
     const preventDefault = (e) => e.preventDefault();
     window.addEventListener('dragover', preventDefault);
     window.addEventListener('drop', preventDefault);
@@ -341,6 +360,14 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (snapHeader) {
+      document.documentElement.style.setProperty('--scrollbar-track-margin-top', '75px');
+    } else {
+      document.documentElement.style.setProperty('--scrollbar-track-margin-top', '160px');
+    }
+  }, [snapHeader]);
+
+  useEffect(() => {
     let scrollTimeout;
     const container = document.querySelector('.app-container');
     const handleScroll = () => {
@@ -369,6 +396,17 @@ function App() {
     undoRef.current = null;
     if (notifTimeout.current) clearTimeout(notifTimeout.current);
     setNotif(prev => ({ ...prev, show: false }));
+  };
+
+  const handleToggleSnapHeader = async (nextValue) => {
+    setSnapHeader(nextValue);
+    const updatedSettings = { ...settingsRef.current, snapHeader: nextValue };
+    settingsRef.current = updatedSettings;
+    try {
+      await invoke('save_settings', { settings: JSON.stringify(updatedSettings) });
+    } catch (err) {
+      console.error("Failed to save settings", err);
+    }
   };
 
   const isSearchActive = searchQuery.trim() !== '' ||
@@ -404,6 +442,8 @@ function App() {
         setDateFilter={setDateFilter}
         viewMode={viewMode}
         setViewMode={setViewMode}
+        snapHeader={snapHeader}
+        onSnapHeaderChange={handleToggleSnapHeader}
       />
 
       <Notification

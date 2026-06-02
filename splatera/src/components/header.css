@@ -25,6 +25,25 @@
   position: relative;
 }
 
+/* Snapped header state styling to expand background and remove pill gaps */
+.splatera-header.snapped {
+  width: calc(100% + 5px);
+  padding: 0 5px 0 0;
+  background-color: rgba(34, 34, 34, 0.8);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+}
+
+.splatera-header.snapped .splatera-header-card {
+  background-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 0;
+  height: 75px;
+  padding: 20px 30px 20px 30px;
+}
+
+
 /* Prevent drag on interactive children */
 .splatera-header button,
 .splatera-header input,
@@ -96,14 +115,14 @@
 
 .action-buttons {
   display: flex;
-  gap: 2px;
+  gap: 5px;
   flex-shrink: 0;
 }
 
 .window-controls {
   display: flex;
-  gap: 10px;
-  margin-left: 20px;
+  gap: 5px;
+  margin-left: 25px;
   flex-shrink: 0;
 }
 
@@ -239,5 +258,15 @@
     grid-row: 2 / 3;
     width: 100%;
     pointer-events: auto;
+  }
+
+  .splatera-header.snapped {
+    width: calc(100% + 5px);
+    padding: 0 5px 0 0;
+  }
+
+  .splatera-header.snapped .splatera-header-card {
+    height: auto;
+    padding: 20px;
   }
 }

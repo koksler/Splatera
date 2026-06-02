@@ -27,6 +27,8 @@ export default memo(function Header({
   setDateFilter,
   viewMode,
   setViewMode,
+  snapHeader,
+  onSnapHeaderChange,
 }) {
   const headerRef = useRef(null);
   const appWindowRef = useRef(null);
@@ -37,11 +39,8 @@ export default memo(function Header({
 
   useEffect(() => {
     if (!headerRef.current) return;
-    const observer = new ResizeObserver(([entry]) => {
-      document.documentElement.style.setProperty(
-        '--scrollbar-margin',
-        `${entry.borderBoxSize[0].blockSize + 10}px`
-      );
+    const observer = new ResizeObserver(() => {
+      // Reserved for future header-height-dependent adjustments
     });
     observer.observe(headerRef.current);
     return () => observer.disconnect();
@@ -97,7 +96,7 @@ export default memo(function Header({
   }, [setSelectedTags]);
 
   return (
-    <header className="splatera-header" data-tauri-drag-region ref={headerRef}>
+    <header className={`splatera-header ${snapHeader ? 'snapped' : ''}`} data-tauri-drag-region ref={headerRef}>
       <div className="splatera-header-card" data-tauri-drag-region>
         <div className="header-logo">
           <Logo size={36} />
@@ -135,7 +134,7 @@ export default memo(function Header({
 
         <div className="header-right-group">
           <div className="action-buttons">
-            <SortMenu sortOrder={sortOrder} setSortOrder={setSortOrder} />
+            <SortMenu sortOrder={sortOrder} setSortOrder={setSortOrder} snapHeader={snapHeader} />
             <FilterMenu
               pickerColor={pickerColor}
               setPickerColor={setPickerColor}
@@ -143,8 +142,14 @@ export default memo(function Header({
               setSelectedTags={setSelectedTags}
               dateFilter={dateFilter}
               setDateFilter={setDateFilter}
+              snapHeader={snapHeader}
             />
-            <SettingsMenu viewMode={viewMode} setViewMode={setViewMode} />
+            <SettingsMenu
+              viewMode={viewMode}
+              setViewMode={setViewMode}
+              snapHeader={snapHeader}
+              onSnapHeaderChange={onSnapHeaderChange}
+            />
           </div>
 
           <div className="window-controls">
