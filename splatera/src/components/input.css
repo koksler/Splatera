@@ -8,13 +8,12 @@
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 999px;
-  padding: 5px 10px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  padding: 5px 5px 5px 10px;
+  transition: border-color 0.2s ease,
 }
 
 .splatera-input-wrapper:focus-within {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px rgba(255, 209, 109, 0.1);
+  border-color: var(--color-text-main);
 }
 
 .splatera-input {
@@ -50,7 +49,7 @@
 
 .search-right-container {
   position: absolute;
-  right: 10px;
+  right: 4px;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -63,13 +62,13 @@
   width: 24px;
   height: 24px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--color-text-button);
   cursor: pointer;
   flex-shrink: 0;
 }
 
 .input-tag-color:hover {
-  border-color: var(--color-accent);
+  border-color: var(--color-text-main);
 }
 
 /* +n tag button */
@@ -92,8 +91,8 @@
 }
 
 .tag-more-button:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--color-text-main);
+  color: var(--color-text-main);
 }
 
 /* Tag manager dropdown popover */

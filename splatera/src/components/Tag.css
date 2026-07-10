@@ -17,11 +17,11 @@
 }
 
 .splatera-tag:hover {
-  border-color: var(--color-accent);
+  border-color: var(--color-text-main);
 }
 
 .splatera-tag:hover .tag-remove-cosmetic {
-  color: var(--color-accent);
+  color: var(--color-text-main);
 }
 
 .tag-variant-input {
@@ -51,5 +51,6 @@
   color: var(--color-text-button);
   margin-left: 4px;
   flex-shrink: 0;
-  pointer-events: none; /* Make X button ignore mouse events so click event bubbles to tag wrapper */
+  pointer-events: none;
+  /* Make X button ignore mouse events so click event bubbles to tag wrapper */
 }

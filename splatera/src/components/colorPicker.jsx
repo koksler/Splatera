@@ -51,7 +51,7 @@ export default function ColorPicker({ color, onChange, onOpenChange, referenceEl
       offset(({ rects }) => {
         const headerEl = document.querySelector('.splatera-header');
         const refEl = refs.reference.current;
-        if (headerEl && refEl && headerEl.contains(refEl)) {
+        if (headerEl && refEl && refEl instanceof Node && headerEl.contains(refEl)) {
           const headerRect = headerEl.getBoundingClientRect();
           const refRect = refEl.getBoundingClientRect();
           return (headerRect.bottom - refRect.bottom) + 10;

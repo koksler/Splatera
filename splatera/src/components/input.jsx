@@ -127,7 +127,7 @@ const Input = React.forwardRef(({
         className="splatera-input" 
         style={{ 
           paddingLeft: Icon ? '20px' : '10px', 
-          paddingRight: `${dynamicPadding}px` 
+          paddingRight: '20px' 
         }} 
         {...props} 
       />
