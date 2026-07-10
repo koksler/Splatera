@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { HexColorPicker } from 'react-colorful';
 import {
   useFloating,
@@ -86,31 +87,38 @@ export default function ColorPicker({ color, onChange, onOpenChange, referenceEl
         className="color-picker-trigger"
         style={{ backgroundColor: color }}
       />
-      {isOpen && (
-        <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
-          <div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()} className="color-picker-popover">
-            <div className="picker-label">Filter by Color</div>
+      {isOpen &&
+        createPortal(
+          <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
+            <div
+              ref={refs.setFloating}
+              style={{ ...floatingStyles, zIndex: 10000 }}
+              {...getFloatingProps()}
+              className="color-picker-popover"
+            >
+              <div className="picker-label">Filter by Color</div>
 
-            <div className="filter-color-row">
-              <div style={{ flex: 1 }} className="splatera-input-wrapper">
-                <input
-                  type="text"
-                  className="splatera-input"
-                  value={hexInput}
-                  onChange={handleHexInput}
-                  placeholder="#HEX..."
+              <div className="filter-color-row">
+                <div style={{ flex: 1 }} className="splatera-input-wrapper">
+                  <input
+                    type="text"
+                    className="splatera-input"
+                    value={hexInput}
+                    onChange={handleHexInput}
+                    placeholder="#HEX..."
+                  />
+                </div>
+                <div
+                  className="filter-color-circle"
+                  style={{ backgroundColor: color }}
                 />
               </div>
-              <div
-                className="filter-color-circle"
-                style={{ backgroundColor: color }}
-              />
-            </div>
 
-            <HexColorPicker color={color} onChange={onChange} />
-          </div>
-        </FloatingFocusManager>
-      )}
+              <HexColorPicker color={color} onChange={onChange} />
+            </div>
+          </FloatingFocusManager>,
+          document.body
+        )}
     </>
   );
 }
