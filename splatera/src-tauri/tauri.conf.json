@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "splatera",
-        "width": 375,
+        "width": 451,
         "height": 875,
         "minHeight": 200,
-        "minWidth": 375,
+        "minWidth": 451,
         "dragDropEnabled": true,
         "decorations": false,
         "visible": false
