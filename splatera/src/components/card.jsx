@@ -39,9 +39,7 @@ export default memo(Card);
 function Card({ data, index, onOpenLightbox }) {
   const videoRef = useRef(null);
   const hoverTimeout = useRef(null);
-  const showImageTimer = useRef(null);
   const [menuData, setMenuData] = useState({ open: false, x: 0, y: 0 });
-  const [showImage, setShowImage] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [autoplay, setAutoplay] = useState(autoplayVideos);
 
@@ -52,17 +50,13 @@ function Card({ data, index, onOpenLightbox }) {
   }, []);
 
   useEffect(() => {
-    if (showImageTimer.current) clearTimeout(showImageTimer.current);
-    showImageTimer.current = setTimeout(() => {
-      setShowImage(true);
-      if (autoplayVideos && isVideo && videoRef.current) {
-        videoRef.current.play().catch(() => { });
-      }
-    }, 80);
-    return () => {
-      if (showImageTimer.current) clearTimeout(showImageTimer.current);
-    };
-  }, [data.id]);
+    if (!data || !data.name) return;
+    const ext = data.name.split('.').pop().toLowerCase();
+    const isVideo = data.kind === 'Video' || ext === 'mp4' || ext === 'webm' || ext === 'mov';
+    if (autoplayVideos && isVideo && videoRef.current) {
+      videoRef.current.play().catch(() => { });
+    }
+  }, [data?.id]);
 
   if (!data) return null;
 
@@ -220,16 +214,13 @@ function Card({ data, index, onOpenLightbox }) {
         />
       ) : (
         <div className="img-container" style={{ background: '#222', width: '100%', height: '100%', contain: 'layout paint' }}>
-          {showImage && (
-            <img
-              src={(isGif && isHovered) || (isAnimatable && autoplay) ? convertFileSrc(data.path) : (data.preview || convertFileSrc(data.path))}
-              alt={data.name}
-              loading="lazy"
-              decoding="async"
-              onLoad={(e) => { e.target.style.opacity = 1; }}
-              style={{ opacity: 0, transition: 'opacity 0.2s ease' }}
-            />
-          )}
+          <img
+            src={(isGif && isHovered) || (isAnimatable && autoplay) ? convertFileSrc(data.path) : (data.preview || convertFileSrc(data.path))}
+            alt={data.name}
+            loading="lazy"
+            decoding="async"
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
         </div>
       )}
 

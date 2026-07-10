@@ -115,13 +115,30 @@ function App() {
   const handleConfirmImport = async (confirmedFiles, saveLocally) => {
     setPendingImport(null);
     setImportHasTemp(false);
-    const totalPaths = confirmedFiles.length;
-    let totalAssetsProcessed = 0;
-
     setNotif({ show: true, title: 'Processing Assets', desc: `Preparing...`, progress: 0 });
 
+    const expandedFiles = [];
+    for (const file of confirmedFiles) {
+      try {
+        const paths = await invoke('expand_directory', { path: file.path });
+        for (const p of paths) {
+          expandedFiles.push({
+            path: p,
+            tags: file.tags,
+            batchName: file.batchName
+          });
+        }
+      } catch (err) {
+        console.error("Failed to expand directory:", file.path, err);
+        expandedFiles.push(file);
+      }
+    }
+
+    const totalPaths = expandedFiles.length;
+    let totalAssetsProcessed = 0;
+
     for (let i = 0; i < totalPaths; i++) {
-      let { path, tags, batchName } = confirmedFiles[i];
+      let { path, tags, batchName } = expandedFiles[i];
       try {
         if (saveLocally) {
           try {
@@ -157,7 +174,7 @@ function App() {
     showTemporaryNotif('Process Complete', `Successfully imported ${totalAssetsProcessed} files.`);
   };
 
-  const loadLibrary = async (tag, search, tags, color, date, sort, currentOffset = 0, append = false) => {
+  const loadLibrary = useCallback(async (tag, search, tags, color, date, sort, currentOffset = 0, append = false) => {
     if (!hasLoadedOnce.current && currentOffset === 0) {
       setInitialLoading(true);
     }
@@ -206,14 +223,14 @@ function App() {
       }
       setIsLoadingMore(false);
     }
-  };
+  }, []);
 
-  const loadMore = () => {
+  const loadMore = useCallback(() => {
     if (isLoadingMore || !hasMore) return;
     const nextOffset = offset + LIMIT;
     setOffset(nextOffset);
     loadLibrary(activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder, nextOffset, true);
-  };
+  }, [isLoadingMore, hasMore, offset, loadLibrary, activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder]);
 
   // Debounced library loading — offloads O(N) filtering to Rust.
   // This is the "Magic Sauce" that makes the UI instant and drops RAM usage.
@@ -383,8 +400,10 @@ function App() {
   const deferredImages = useDeferredValue(images);
 
   // Lightbox navigation helpers
-  const openLightbox = (idx) => setLightboxIndex(Math.max(0, Math.min(idx, deferredImages.length - 1)));
-  const closeLightbox = () => setLightboxIndex(null);
+  const openLightbox = useCallback((idx) => {
+    setLightboxIndex(Math.max(0, Math.min(idx, imagesRef.current.length - 1)));
+  }, []);
+  const closeLightbox = useCallback(() => setLightboxIndex(null), []);
   const lightboxFile = lightboxIndex !== null ? deferredImages[lightboxIndex] : null;
 
   // Undo delete handler
