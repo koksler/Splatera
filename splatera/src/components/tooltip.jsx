@@ -15,12 +15,12 @@ import {
 } from '@floating-ui/react';
 import './tooltip.css';
 
-export const Tooltip = ({ 
-    children, 
-    content, 
-    hotkey, 
-    position = 'bottom',
-    disabled = false
+export const Tooltip = ({
+  children,
+  content,
+  hotkey,
+  position = 'bottom',
+  disabled = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -30,7 +30,7 @@ export const Tooltip = ({
     placement: position,
     whileElementsMounted: autoUpdate,
     middleware: [
-      offset(10),
+      offset(15),
       flip({ padding: 10 }),
       shift({ padding: 10 }),
     ],
@@ -57,12 +57,12 @@ export const Tooltip = ({
         ...getReferenceProps(child.props),
         ref: mergedRef,
       })}
-      
+
       {isOpen && !disabled && (
         <FloatingPortal>
-          <div 
-            ref={refs.setFloating} 
-            style={{ ...floatingStyles, zIndex: 9999 }} 
+          <div
+            ref={refs.setFloating}
+            style={{ ...floatingStyles, zIndex: 9999 }}
             {...getFloatingProps()}
           >
             <div className="tooltip-bubble">

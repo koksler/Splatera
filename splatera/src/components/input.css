@@ -7,13 +7,13 @@
   height: 40px;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 999px;
+  border-radius: 12px;
   padding: 5px 5px 5px 10px;
   transition: border-color 0.2s ease,
 }
 
 .splatera-input-wrapper:focus-within {
-  border-color: var(--color-text-main);
+  border-color: var(--color-text-secondary);
 }
 
 .splatera-input {
@@ -57,11 +57,10 @@
   z-index: 1;
 }
 
-/* Search color swatch */
 .input-tag-color {
   width: 24px;
   height: 24px;
-  border-radius: 8px;
+  border-radius: 12px;
   border: 1px solid var(--color-text-button);
   cursor: pointer;
   flex-shrink: 0;
@@ -81,7 +80,7 @@
   height: 25px;
   border-radius: 8px;
   background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-text-button);
   color: var(--color-text-main);
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
@@ -91,7 +90,7 @@
 }
 
 .tag-more-button:hover {
-  border-color: var(--color-text-main);
+  border-color: var(--color-text-secondary);
   color: var(--color-text-main);
 }
 

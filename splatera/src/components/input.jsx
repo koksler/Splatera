@@ -171,7 +171,6 @@ const Input = React.forwardRef(({
             color={pickerColor}
             onChange={onPickerColorChange}
             onOpenChange={setIsColorPickerOpen}
-            referenceEl={wrapperRef.current}
           />
         )}
       </div>
