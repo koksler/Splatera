@@ -155,8 +155,14 @@ function App() {
             await invoke('update_asset_tags', { id: assetInfo.id, tags: mergedTags });
           }
           if (batchName.trim()) {
+            const origName = assetInfo.file_name || assetInfo.metadata?.file_name || '';
+            const origExt = origName.includes('.') ? origName.split('.').pop() : (assetInfo.extension || '');
+            const hasExt = batchName.includes('.');
+            const baseRename = hasExt ? batchName.slice(0, batchName.lastIndexOf('.')) : batchName;
+            const extToUse = hasExt ? batchName.slice(batchName.lastIndexOf('.')) : (origExt ? `.${origExt}` : '');
+
             const needsNumber = totalPaths > 1 || assets.length > 1;
-            const finalName = needsNumber ? `${batchName}_${totalAssetsProcessed}` : batchName;
+            const finalName = needsNumber ? `${baseRename}_${totalAssetsProcessed}${extToUse}` : `${baseRename}${extToUse}`;
             await invoke('rename_asset', { id: assetInfo.id, newName: finalName });
           }
         }
@@ -245,10 +251,16 @@ function App() {
   }, [activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder, refreshTrigger]);
 
   const confirmRename = async (newName) => {
-    if (newName && newName !== renameData.name) {
+    if (newName && renameData) {
       try {
-        await invoke('rename_asset', { id: renameData.id, newName });
-        setRefreshTrigger(prev => prev + 1);
+        const origName = renameData.file_name || renameData.name || '';
+        const origExt = origName.includes('.') ? origName.split('.').pop() : (renameData.extension || '');
+        const hasExt = newName.includes('.');
+        const finalName = hasExt ? newName : (origExt ? `${newName}.${origExt}` : newName);
+
+        await invoke('rename_asset', { id: renameData.id, newName: finalName });
+        setRefreshTrigger((prev) => prev + 1);
+        showTemporaryNotif('Renamed', 'Asset renamed successfully.');
       } catch (err) {
         console.error("Rename failed:", err);
       }
@@ -271,7 +283,22 @@ function App() {
   const startImportFlow = async (filePaths) => {
     if (!filePaths || filePaths.length === 0) return;
     try {
-      const prepResult = await invoke('prepare_dropped_paths', { paths: filePaths });
+      // Unpack directories using expand_directory
+      let expandedPaths = [];
+      for (const p of filePaths) {
+        try {
+          const res = await invoke('expand_directory', { path: p });
+          if (res && res.length > 0) {
+            expandedPaths.push(...res);
+          } else {
+            expandedPaths.push(p);
+          }
+        } catch {
+          expandedPaths.push(p);
+        }
+      }
+
+      const prepResult = await invoke('prepare_dropped_paths', { paths: expandedPaths });
       const safePaths = prepResult.paths;
       const hasTemp = prepResult.has_temp;
 
@@ -290,12 +317,12 @@ function App() {
       }
 
       if (allowed_paths.length > 0) {
-        setImportHasTemp(hasTemp);
-        setPendingImport(allowed_paths);
+        setImportHasTemp((prev) => prev || hasTemp);
+        setPendingImport((prev) => (prev ? [...new Set([...prev, ...allowed_paths])] : allowed_paths));
       }
     } catch (err) {
       console.error("Import checking failed, fallback to direct import:", err);
-      setPendingImport(filePaths);
+      setPendingImport((prev) => (prev ? [...new Set([...prev, ...filePaths])] : filePaths));
     }
   };
 
