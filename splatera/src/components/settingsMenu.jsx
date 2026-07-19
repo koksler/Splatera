@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, DatabaseZap, Play, Trash2 } from 'lucide-react';
+import { Settings, DatabaseZap, Play, Trash2, Copy } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import {
   useFloating,
@@ -15,6 +15,7 @@ import {
 } from '@floating-ui/react';
 import Button from './button';
 import Toggle from './toggle';
+import SelectButton from './selectButton';
 import './settingsMenu.css';
 
 export default function SettingsMenu({
@@ -26,6 +27,7 @@ export default function SettingsMenu({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [autoplay, setAutoplay] = useState(false);
+  const [testOption, setTestOption] = useState('a');
 
   const { refs, floatingStyles, context } = useFloating({
     open: isOpen,
@@ -142,6 +144,38 @@ export default function SettingsMenu({
               onClick={handleClearLibrary}
               className="settings-action-btn settings-danger-btn"
             />
+
+            <div className="settings-label" style={{ marginTop: '8px' }}>Test SelectButtons</div>
+            <SelectButton
+              icon={Copy}
+              text="Option A"
+              active={testOption === 'a'}
+              onClick={() => setTestOption('a')}
+              color="#5C2FFF"
+            />
+            <SelectButton
+              icon={Copy}
+              text="Option B"
+              active={testOption === 'b'}
+              onClick={() => setTestOption('b')}
+              color="#FF5C2F"
+            />
+            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              <SelectButton
+                icon={Copy}
+                minimized
+                active={testOption === 'a'}
+                onClick={() => setTestOption('a')}
+                color="#5C2FFF"
+              />
+              <SelectButton
+                icon={Copy}
+                minimized
+                active={testOption === 'b'}
+                onClick={() => setTestOption('b')}
+                color="#FF5C2F"
+              />
+            </div>
           </div>
         </FloatingFocusManager>
       )}

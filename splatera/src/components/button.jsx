@@ -5,6 +5,7 @@ import { Tooltip } from './tooltip';
 const Button = React.forwardRef(({ 
   icon: Icon, 
   text, 
+  variant,
   onClick, 
   className = '', 
   tooltip, 
@@ -12,7 +13,10 @@ const Button = React.forwardRef(({
   tooltipPosition = 'bottom',
   ...props 
 }, ref) => {
-  const modeClass = text ? 'with-text' : 'icon-only';
+  const isTiny = variant === 'tiny';
+  const modeClass = isTiny ? 'tiny' : (text ? 'with-text' : 'icon-only');
+  const iconSize = isTiny ? 9 : 15;
+  const iconStroke = isTiny ? 1.5 : 2;
 
   const buttonContent = (
     <button 
@@ -21,9 +25,9 @@ const Button = React.forwardRef(({
       onClick={onClick}
       {...props}
     >
-      {Icon && <Icon size={15} strokeWidth={2} />}
+      {Icon && <Icon size={iconSize} strokeWidth={iconStroke} />}
       
-      {text && <span>{text}</span>}
+      {!isTiny && text && <span>{text}</span>}
     </button>
   );
 
