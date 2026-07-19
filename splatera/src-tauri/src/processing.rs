@@ -341,10 +341,30 @@ pub async fn prepare_dropped_paths(
     paths: Vec<String>,
 ) -> Result<PrepareResult, String> {
     let config = state.config.clone();
+    let mut raw_paths = Vec::new();
+
+    for p in paths {
+        let src_path = Path::new(&p);
+        if src_path.is_dir() {
+            for entry in WalkDir::new(src_path).into_iter().filter_map(|e| e.ok()) {
+                if entry.file_type().is_file() {
+                    if let Some(ext) = entry.path().extension() {
+                        let ext_str = ext.to_string_lossy().to_lowercase();
+                        if ALL_EXTENSIONS.contains(&ext_str.as_str()) {
+                            raw_paths.push(entry.path().to_string_lossy().into_owned());
+                        }
+                    }
+                }
+            }
+        } else {
+            raw_paths.push(p);
+        }
+    }
+
     let mut result = Vec::new();
     let mut has_temp = false;
 
-    for p in paths {
+    for p in raw_paths {
         let src_path = Path::new(&p);
         if src_path.exists() && is_temp_path(src_path) {
             has_temp = true;
