@@ -21,6 +21,19 @@ export default function InputModal({ title = "Let’s rename this", data, onConf
 
   const [value, setValue] = useState(data.file_name || data.name || '');
 
+  // Global ESC key listener
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onCancel) onCancel();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onCancel]);
+
   const ext = (data.file_name || data.name || '').split('.').pop().toLowerCase();
   const isCodeOrText = data.kind === 'Code' || data.kind === 'Text';
   const isVideo = data.kind === 'Video' || VIDEO_EXTS.includes(ext);

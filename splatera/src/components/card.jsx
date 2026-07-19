@@ -73,7 +73,9 @@ function Card({ data, index, onOpenLightbox }) {
   const isVideo = data.kind === 'Video' || ext === 'mp4' || ext === 'webm' || ext === 'mov';
   const isGif = ext === 'gif';
   const isAnimatable = ext === 'gif' || ext === 'webp'; // gif always, webp when animated
-  const cardAspectRatio = data.width && data.height ? `${data.width} / ${data.height}` : '1 / 1';
+  const rawAspect = data.width && data.height ? data.width / data.height : 1;
+  const clampedAspect = Math.min(Math.max(rawAspect, 0.5), 2.2);
+  const cardAspectRatio = `${clampedAspect}`;
 
   const handleMouseEnter = () => {
     setIsHovered(true);

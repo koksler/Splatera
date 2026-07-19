@@ -65,6 +65,19 @@ export default function AssetModals({
   // Remaining assets for import thumbnails
   const remainingAssets = isImportMode ? assets.slice(currentIndex + 1) : [];
 
+  // Global ESC key listener to close modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onClose) onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   useEffect(() => {
     setTagInput('');
     setRenameInput('');

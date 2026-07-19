@@ -578,7 +578,8 @@ const useJustifiedPositioner = ({ width, items, gutter = 15, targetHeight = 280 
 
       while (i < items.length) {
         const item = items[i];
-        const itemAR = (item.width && item.height) ? (item.width / item.height) : 1;
+        const rawAR = (item && item.width && item.height) ? (item.width / item.height) : 1;
+        const itemAR = Math.min(Math.max(rawAR, 0.5), 2.2);
         rowItems.push({ index: i, ar: itemAR });
         rowAspectRatio += itemAR;
         i++;
@@ -610,8 +611,8 @@ const useJustifiedPositioner = ({ width, items, gutter = 15, targetHeight = 280 
       columnWidth: 1, columnCount: 1, size: () => coords.length,
       range: (lo, hi, cb) => {
         for (let idx = 0; idx < coords.length; idx++) {
-          const item = coords[idx];
-          if (item && item.top + item.height > lo && item.top < hi) cb(idx, item.left, item.top);
+          const pos = coords[idx];
+          if (pos && pos.top + pos.height > lo && pos.top < hi) cb(idx, pos.left, pos.top);
         }
       }
     };
