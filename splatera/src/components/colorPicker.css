@@ -25,6 +25,7 @@
   flex-direction: column;
   gap: 12px;
   width: 240px;
+  box-sizing: border-box;
 }
 
 .picker-label {

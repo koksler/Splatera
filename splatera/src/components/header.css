@@ -3,28 +3,29 @@
   top: 0;
   z-index: 50;
   width: 100%;
-  padding: 10px 20px 0 20px;
+  padding: 10px 10px 0 10px;
   box-sizing: border-box;
-  
+
   /* Enforce container query styling based on header width */
   container-type: inline-size;
   container-name: header;
 }
 
-/* The visual card — draggable via data-tauri-drag-region on the element */
+/* The visual card (draggable via data-tauri-drag-region on the element) */
 .splatera-header-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
   box-sizing: border-box;
-  height: 55px; /* Default height 55px */
-  padding: 10px !important; /* Paddings of the header itself are always 10px from each side */
-  background-color: rgba(34, 34, 34, 0.9); /* color-bg at 90% opacity */
+  height: 55px;
+  padding: 10px 10px 10px 10px !important;
+  background-color: rgba(34, 34, 34, 0.75);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
-  border-radius: 10px;
-  border: 1px solid var(--color-border); /* 1px border for all 4 sides of the pill shape */
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+
   position: relative;
   transition: all 0.2s ease-in-out;
 }
@@ -33,10 +34,11 @@
 .splatera-header.snapped {
   width: calc(100% + 5px);
   padding: 0 5px 0 0;
-  background-color: rgba(34, 34, 34, 0.9); /* color-bg at 90% opacity */
+  background-color: rgba(34, 34, 34, 0.75);
+
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
-  border-bottom: 1px solid var(--color-border); /* only bottom border when snapped */
+  border-bottom: 1px solid var(--color-border);
 }
 
 .splatera-header.snapped .splatera-header-card {
@@ -44,12 +46,11 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   border-radius: 0;
-  border: none; /* No border on the card itself when snapped */
-  height: 55px; /* Snapped height is also 55px (regular) */
-  padding: 10px !important; /* Paddings of the header itself are always 10px from each side */
+  border: none;
+  height: 55px;
+  padding: 10px !important;
 }
 
-/* Prevent drag on interactive children */
 .splatera-header button,
 .splatera-header input,
 .splatera-header-card button,
@@ -59,10 +60,6 @@
 .splatera-header-card .splatera-input-wrapper {
   -webkit-app-region: no-drag;
 }
-
-/* =========================================================
-   SEARCH INPUT STYLE OVERRIDES (35px HEIGHT)
-   ========================================================= */
 
 .search-container .splatera-input-wrapper {
   height: 35px !important;
@@ -86,10 +83,6 @@
   margin: 0 10px !important;
 }
 
-/* =========================================================
-   DEFAULT / MAXIMUM (States 1 & 2)
-   ========================================================= */
-
 .header-left-part {
   display: flex;
   align-items: center;
@@ -99,13 +92,13 @@
 }
 
 .header-left-part .header-logo {
-  margin-right: 10px; /* 10px gap between Logo and Settings */
+  margin-right: 10px;
   display: flex;
   align-items: center;
 }
 
 .header-left-part .settings-menu-container {
-  margin-right: 5px; /* 5px gap between Settings and Import */
+  margin-right: 5px;
   display: flex;
   align-items: center;
 }
@@ -114,7 +107,7 @@
   display: flex;
   align-items: center;
   flex: 1;
-  max-width: 205px; /* Import button max-width is 205px */
+  max-width: 205px;
 }
 
 .header-left-part .import-btn {
@@ -122,18 +115,17 @@
   justify-content: center;
 }
 
-/* Search container: absolutely centered */
 .header-center-part {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  width: 40%; /* removed clamp min-width constraint */
+  width: 40%;
   max-width: 600px;
   z-index: 1;
   pointer-events: none;
 }
 
-.header-center-part > * {
+.header-center-part>* {
   pointer-events: auto;
 }
 
@@ -152,36 +144,35 @@
 
 .action-buttons {
   display: flex;
-  gap: 5px; /* 5px gap between Sort and Filter */
-  margin-right: 10px; /* 10px gap between Filter and Window controls */
+  gap: 5px;
+  margin-right: 10px;
   align-items: center;
 }
 
 .window-controls {
   display: flex;
-  gap: 5px; /* 5px gap between minimize, maximize, close */
+  gap: 5px;
   align-items: center;
 }
 
-/* =========================================================
-   ADAPTIVITY STATES (Container Queries based on header width)
-   ========================================================= */
+/* ADAPTIVITY STATES (Container Queries based on header width) */
 
-/* ---- State 3: Minimal One (Header <= 1186px) ---- */
 @container header (max-width: 1186px) {
   .splatera-header-card {
-    height: 100px !important; /* height is exactly 100px */
-    padding: 10px !important;
+    height: 105px !important;
+    /* height is exactly 100px */
+    padding: 10px 10px 15px 10px !important;
     display: grid;
-    grid-template-columns: auto auto 1fr auto; /* 4 columns */
+    grid-template-columns: auto auto 1fr auto;
+    /* 4 columns */
     grid-template-rows: auto auto;
     row-gap: 10px;
     column-gap: 5px;
   }
 
   .splatera-header.snapped .splatera-header-card {
-    height: 100px !important;
-    padding: 10px !important;
+    height: 105px !important;
+    padding: 10px 10px 15px 10px !important;
   }
 
   .header-left-part,
@@ -222,7 +213,8 @@
     grid-column: 2;
     align-self: center;
     display: flex;
-    width: 100px !important; /* import button width is 100px */
+    width: 100px !important;
+    /* import button width is 100px */
     max-width: 100px !important;
     min-width: 100px !important;
   }
@@ -255,21 +247,22 @@
   }
 }
 
-/* ---- State 4: Minimal Size (Header <= 645px) ---- */
+/* State 4: Minimal Size (Header <= 645px) */
 @container header (max-width: 645px) {
   .splatera-header-card {
-    height: 100px !important; /* height is exactly 100px */
-    padding: 10px !important;
+    height: 105px !important;
+    padding: 10px 10px 15px 10px !important;
     display: grid;
-    grid-template-columns: auto 1fr auto; /* 3 columns */
+    grid-template-columns: auto 1fr auto;
+    /* 3 columns */
     grid-template-rows: auto auto;
     row-gap: 10px;
     column-gap: 5px;
   }
 
   .splatera-header.snapped .splatera-header-card {
-    height: 100px !important;
-    padding: 10px !important;
+    height: 105px !important;
+    padding: 10px 10px 15px 10px !important;
   }
 
   /* Restore left part flex alignment for Row 1 left group */
@@ -293,7 +286,7 @@
   .header-left-part .import-btn-container {
     display: flex;
     align-items: center;
-    width: 100px !important; /* import button width is 100px */
+    width: 100px !important;
     max-width: 100px !important;
     min-width: 100px !important;
   }
@@ -326,7 +319,8 @@
     position: static !important;
     transform: none !important;
     width: 100% !important;
-    max-width: none !important; /* Override max-width to allow stretching and hit 5px gap */
+    max-width: none !important;
+    /* Override max-width to allow stretching and hit 5px gap */
     align-self: center;
   }
 
@@ -349,7 +343,6 @@
     max-width: 35px !important;
     flex: 0 0 35px !important;
     padding: 0 !important;
-    border-radius: 50% !important;
     overflow: hidden !important;
     justify-content: center !important;
     align-items: center !important;
