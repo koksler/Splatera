@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
+import { X, RotateCcw } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import Input from './input';
+import TextField from './textField';
 import Button from './button';
 import './inputModal.css';
+
+const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'];
+const VIDEO_EXTS = ['mp4', 'webm', 'mov'];
 
 const getLanguage = (ext) => {
   if (!ext) return 'text';
@@ -12,81 +16,99 @@ const getLanguage = (ext) => {
   return map[ext.toLowerCase()] || 'text';
 };
 
-export default function InputModal({ title, data, onConfirm, onCancel }) {
-  if (!data) {
-    console.warn("InputModal: data prop is missing!");
-    return null;
-  }
+export default function InputModal({ title = "Let’s rename this", data, onConfirm, onCancel }) {
+  if (!data) return null;
 
-  const [value, setValue] = useState(data.name || '');
+  const [value, setValue] = useState(data.file_name || data.name || '');
 
+  const ext = (data.file_name || data.name || '').split('.').pop().toLowerCase();
   const isCodeOrText = data.kind === 'Code' || data.kind === 'Text';
-  const imgSrc = !isCodeOrText && (data.preview || (data.path ? convertFileSrc(data.path) : null));
-  const ext = data.name ? data.name.split('.').pop().toLowerCase() : '';
+  const isVideo = data.kind === 'Video' || VIDEO_EXTS.includes(ext);
+  const isImage = !isCodeOrText && !isVideo && (data.preview || data.path || IMAGE_EXTS.includes(ext));
 
-  const handleOverlayClick = (e) => {
-    if (e.target.classList.contains('modal-overlay')) onCancel();
+  const previewSrc = isImage
+    ? (data.preview || (data.path ? convertFileSrc(data.path) : null))
+    : (isVideo ? (data.path ? convertFileSrc(data.path) : null) : null);
+
+  const handleConfirm = () => {
+    if (onConfirm) onConfirm(value);
   };
 
   return (
     <div
-      className="modal-overlay"
-      onClick={handleOverlayClick}
+      className="input-modal-overlay"
+      onMouseDown={onCancel}
       onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel(); } }}
     >
-      <div className="modal-content">
-        
-        {/* IMAGE PREVIEW */}
-        {imgSrc && (
-          <div className="modal-preview-wrapper" style={{ marginBottom: '15px' }}>
-            <img src={imgSrc} alt="preview" className="modal-preview-img" />
-          </div>
-        )}
+      <div className="input-modal-container" onMouseDown={(e) => e.stopPropagation()}>
+        {/* Header Title */}
+        <div className="input-modal-title">Let’s rename this</div>
 
-        {/* CODE PREVIEW */}
-        {isCodeOrText && data.contentSnippet && (
-          <div 
-            className="modal-preview-wrapper" 
-            style={{ 
-              alignItems: 'flex-start',
-              overflow: 'hidden',
-              backgroundColor: '#1E1E1E',
-              marginBottom: '15px'
-            }}
-          >
+        {/* Square Preview Box (230x230) */}
+        <div className="input-modal-preview-box">
+          {previewSrc && !isVideo && (
+            <img src={previewSrc} alt="preview" className="input-modal-preview-media" />
+          )}
+          {previewSrc && isVideo && (
+            <video
+              src={previewSrc}
+              className="input-modal-preview-media"
+              muted
+              autoPlay
+              loop
+              playsInline
+            />
+          )}
+          {isCodeOrText && data.contentSnippet && (
             <SyntaxHighlighter
               language={getLanguage(ext)}
               style={vscDarkPlus}
-              customStyle={{ 
-                margin: 0, 
-                padding: '15px',
-                background: 'transparent', 
+              customStyle={{
+                margin: 0,
+                padding: '12px',
+                background: 'transparent',
                 fontSize: '11px',
                 width: '100%',
                 height: '100%',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
               }}
-              wrapLongLines={true}
+              wrapLongLines
             >
               {data.contentSnippet}
             </SyntaxHighlighter>
-          </div>
-        )}
+          )}
+          {!previewSrc && !data.contentSnippet && (
+            <span style={{ color: 'var(--color-text-button)', fontSize: '12px' }}>
+              No preview available
+            </span>
+          )}
+        </div>
 
-        <div className="modal-header" style={{ marginBottom: '10px' }}>{title}</div>
-        
-        <div style={{ width: '100%', marginBottom: '15px' }}>
-          <Input 
-            autoFocus 
-            value={value} 
+        {/* TextField */}
+        <div style={{ width: '100%' }}>
+          <TextField
+            autoFocus
+            placeholder="Enter a new name"
+            value={value}
             onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && onConfirm(value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleConfirm()}
           />
         </div>
 
-        <div className="modal-actions">
-          <Button text="Cancel" onClick={onCancel} className="modal-btn" />
-          <Button text="Confirm" onClick={() => onConfirm(value)} className="modal-btn" />
+        {/* Footer Action Buttons */}
+        <div className="input-modal-footer">
+          <Button
+            icon={X}
+            text="Close"
+            onClick={onCancel}
+            className="input-modal-btn-flex"
+          />
+          <Button
+            icon={RotateCcw}
+            text="Confirm"
+            onClick={handleConfirm}
+            className="input-modal-btn-flex"
+          />
         </div>
       </div>
     </div>
