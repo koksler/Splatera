@@ -1,0 +1,58 @@
+.segmented-control-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 35px;
+  padding: 2px;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 9999px;
+  user-select: none;
+  width: fit-content;
+}
+
+/* Sliding active indicator box */
+.segmented-control-indicator {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 9999px;
+  box-sizing: border-box;
+  transition: left 0.22s cubic-bezier(0.4, 0, 0.2, 1), width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Option button */
+.segmented-control-item {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100px;
+  height: 100%;
+  padding: 0 10px;
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-button);
+  cursor: pointer;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+}
+
+.segmented-control-item:hover {
+  color: var(--color-text-main);
+}
+
+.segmented-control-item.is-active {
+  color: var(--color-text-main);
+}

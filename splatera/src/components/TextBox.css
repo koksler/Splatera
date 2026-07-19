@@ -1,0 +1,36 @@
+.splatera-textbox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 5px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 35px;
+  max-height: 120px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 5px;
+  transition: border-color 0.2s ease;
+}
+
+.splatera-textbox:hover {
+  border-color: var(--color-text-secondary);
+}
+
+/* Scrollbar matching App.css */
+.splatera-textbox::-webkit-scrollbar {
+  width: 5px;
+  background-color: transparent;
+}
+
+.splatera-textbox::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 9999px;
+}
+
+.splatera-textbox::-webkit-scrollbar-track {
+  background-color: transparent;
+}
