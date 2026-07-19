@@ -39,3 +39,19 @@
 .splatera-label:active {
   filter: brightness(1.5);
 }
+
+.splatera-label.editable {
+  gap: 6px;
+  padding-right: 6px;
+}
+
+.splatera-label-remove {
+  color: var(--color-text-button);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.1s ease;
+}
+
+.splatera-label-remove:hover {
+  color: var(--color-text-main);
+}
