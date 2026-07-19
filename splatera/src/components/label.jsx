@@ -10,12 +10,16 @@ export default function Label({ text, isActive = true, editable = false, onRemov
     }
   };
 
+  const displayText = typeof text === 'string' && text.length > 20
+    ? text.slice(0, 20) + '...'
+    : text;
+
   return (
     <div 
       className={`splatera-label ${!isActive ? 'inactive' : ''} ${editable ? 'editable' : ''} ${className}`}
       onClick={onClick}
     >
-      <span>{text}</span>
+      <span>{displayText}</span>
       {editable && (
         <X 
           size={15} 
