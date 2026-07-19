@@ -1,0 +1,201 @@
+.asset-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.asset-modal-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+
+  background-image: 
+    linear-gradient(#1a1a1a 1px, transparent 1px),
+    linear-gradient(90deg, #1a1a1a 1px, transparent 1px);
+  background-size: 35px 35px;
+
+  -webkit-mask-image: linear-gradient(to top, black 0%, transparent 100%);
+  mask-image: linear-gradient(to top, black 0%, transparent 100%);
+}
+
+/* Modal Container Box */
+.asset-modal-container {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 600px;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 30px 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  color: var(--color-text-main);
+  user-select: none;
+}
+
+/* 1. Header Title */
+.asset-modal-title {
+  text-align: center;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-main);
+}
+
+/* 2. Middle Body Layout (Left + Right columns) */
+.asset-modal-body {
+  display: flex;
+  align-items: stretch;
+  gap: 15px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Left Column - 230px width matches 4 x 50px thumbnails + 3 x 10px gaps */
+.asset-modal-left {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 230px;
+  flex-shrink: 0;
+}
+
+/* Main Preview Container - Stretches dynamically to match right panel height */
+.asset-modal-main-preview {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 200px;
+  border-radius: 10px;
+  overflow: hidden;
+  background-color: #121212;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.asset-modal-media-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Thumbnails Row */
+.asset-modal-thumbs-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+}
+
+/* Right Panel */
+.asset-modal-right {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  background-color: var(--color-border);
+  border-radius: 12px;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+/* Save locally toggle row */
+.asset-modal-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-main);
+}
+
+/* Tag input row with Plus button */
+.asset-modal-tag-input-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  width: 100%;
+}
+
+/* 4. Action Buttons Footer Row */
+.asset-modal-footer {
+  display: flex;
+  gap: 5px;
+  width: 100%;
+  align-items: center;
+}
+
+.asset-modal-btn-skip {
+  width: 80px !important;
+  flex-shrink: 0;
+}
+
+.asset-modal-btn-flex {
+  flex: 1;
+}
+
+/* 5. Responsive State for Narrow Screens / App Width < 700px */
+@media (max-width: 700px) {
+  .asset-modal-container {
+    max-width: 100%;
+    padding: 20px 15px;
+    gap: 12px;
+  }
+
+  .asset-modal-body {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .asset-modal-left {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .asset-modal-main-preview {
+    width: 50px;
+    height: 50px;
+    min-height: 50px;
+    flex: 0 0 50px;
+    border-radius: 10px;
+  }
+
+  .asset-modal-thumbs-row {
+    flex: 1;
+    overflow-x: auto;
+  }
+
+  .asset-modal-right {
+    width: 100%;
+  }
+
+  .asset-modal-footer {
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .asset-modal-footer button,
+  .asset-modal-btn-skip,
+  .asset-modal-btn-flex {
+    width: 100% !important;
+  }
+}
