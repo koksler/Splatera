@@ -566,9 +566,22 @@ function App() {
 
 // ─── Justified layout positioner ─────────────────────────────────────────────
 
-const useJustifiedPositioner = ({ width, items, gutter = 15, targetHeight = 280 }) => {
+const useJustifiedPositioner = ({ width, items = [], gutter = 15, targetHeight = 280 }) => {
   return useMemo(() => {
     const coords = [];
+    if (!width || !items || items.length === 0) {
+      return {
+        width: width || 0,
+        height: 0,
+        estimateHeight: () => 0,
+        get: () => undefined,
+        all: () => [],
+        set: () => { }, update: () => { }, shortestColumn: () => 0,
+        columnWidth: 1, columnCount: 1, size: () => 0,
+        range: () => { }
+      };
+    }
+
     let currentY = 0;
     let i = 0;
 
@@ -577,8 +590,8 @@ const useJustifiedPositioner = ({ width, items, gutter = 15, targetHeight = 280 
       let rowAspectRatio = 0;
 
       while (i < items.length) {
-        const item = items[i];
-        const rawAR = (item && item.width && item.height) ? (item.width / item.height) : 1;
+        const curItem = items[i];
+        const rawAR = (curItem && curItem.width && curItem.height) ? (curItem.width / curItem.height) : 1;
         const itemAR = Math.min(Math.max(rawAR, 0.5), 2.2);
         rowItems.push({ index: i, ar: itemAR });
         rowAspectRatio += itemAR;
@@ -589,9 +602,11 @@ const useJustifiedPositioner = ({ width, items, gutter = 15, targetHeight = 280 
 
       const availableWidth = width - (rowItems.length - 1) * gutter;
       const isLastRow = i === items.length;
+      const maxRowHeight = targetHeight * 1.35;
+      const rawRowHeight = availableWidth / rowAspectRatio;
       const rowHeight = isLastRow
-        ? Math.min(targetHeight, availableWidth / rowAspectRatio)
-        : availableWidth / rowAspectRatio;
+        ? Math.min(targetHeight, rawRowHeight)
+        : Math.min(maxRowHeight, rawRowHeight);
 
       let currentX = 0;
       for (const rowItem of rowItems) {
@@ -604,7 +619,7 @@ const useJustifiedPositioner = ({ width, items, gutter = 15, targetHeight = 280 
 
     return {
       width, height: currentY,
-      estimateHeight: () => (items.length / 4) * targetHeight,
+      estimateHeight: () => currentY,
       get: (index) => coords[index],
       all: () => coords,
       set: () => { }, update: () => { }, shortestColumn: () => 0,

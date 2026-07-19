@@ -3,6 +3,7 @@
     opacity: 0;
     transform: translateY(-10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -10,62 +11,72 @@
 }
 
 .splatera-card-popup {
-    position: absolute;
-    top: 8px;
-    left: 8px;
-    right: 8px;
-    
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 12px;
-    
-    background-color: rgba(34, 34, 34, 0.8);
-    backdrop-filter: blur(40px);
-    -webkit-backdrop-filter: blur(40px); 
-    
-    border-radius: 12px;
-    border: 1px solid var(--color-border);
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  right: 5px;
 
-    max-height: 50px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  padding: 10px;
 
-    animation: slideDownFade 0.2s ease-out forwards;
-  }
-  
-  /* Left section: labels and info */
-  .popup-info {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    overflow: hidden;
+  background-color: rgba(34, 34, 34, 0.90);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
 
-    margin-right: 5px;
-  }
-  
-  .popup-title {
-    font-family: inherit;
-    font-weight: 700;
-    color: var(--color-text-main);
-    font-size: 16px;
-    line-height: 1.1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis; 
-  }
-  
-  .popup-date {
-    font-family: inherit;
-    font-weight: 700;
-    color: var(--color-text-secondary);
-    font-size: 10px;
-    line-height: 1;
-  }
-  
-  /* Right section: actions */
-  
-  .popup-actions {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    flex-shrink: 0;
-  }
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+
+  box-sizing: border-box;
+  overflow: hidden;
+  z-index: 10;
+
+  animation: slideDownFade 0.2s ease-out forwards;
+}
+
+/* Left section: labels and info */
+.popup-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  min-width: 100px;
+  flex: 1;
+}
+
+.popup-title {
+  font-family: inherit;
+  font-weight: 700;
+  color: var(--color-text-main);
+  font-size: 16px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.popup-date {
+  font-family: inherit;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* Right section: actions (tags + action buttons) */
+.popup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+}
+
+.popup-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
