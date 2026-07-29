@@ -14,6 +14,40 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
+use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteOperationData {
+    pub id: String,
+    pub original_path: String,
+    pub preview_path: Option<String>,
+    pub kind: String,
+    pub dominant_colors: Option<String>,
+    pub tags: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub file_name: Option<String>,
+    pub extension: Option<String>,
+    pub last_modified_os: Option<u64>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub created_at: Option<u64>,
+    pub content_snippet: Option<String>,
+    pub is_broken: Option<i32>,
+    pub file_hash: Option<String>,
+    pub deleted_from_device: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportOperationData {
+    pub asset_ids: Vec<String>,
+    pub copied_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UndoResult {
+    pub op_type: String,
+    pub count: usize,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -104,7 +138,12 @@ fn init_db(config: &AppConfig) -> Result<Connection, String> {
         (),
     );
     let _ = conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_assets_hash ON assets(file_hash)",
+        "CREATE TABLE IF NOT EXISTS operation_log (
+            id TEXT PRIMARY KEY,
+            op_type TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
+            details_json TEXT NOT NULL
+        )",
         (),
     );
 
@@ -405,6 +444,25 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
     }
     tx.commit().map_err(|e| e.to_string())?;
 
+    // Clean up orphaned thumbnail files
+    let thumb_dir = Path::new(&state.config.library_path).join("thumbnails");
+    if thumb_dir.exists() {
+        let valid_ids: std::collections::HashSet<String> = {
+            let mut stmt = conn.prepare("SELECT id FROM assets").map_err(|e| e.to_string())?;
+            let ids = stmt.query_map((), |row| row.get::<_, String>(0)).map_err(|e| e.to_string())?;
+            ids.filter_map(|r| r.ok()).collect()
+        };
+        if let Ok(entries) = fs::read_dir(&thumb_dir) {
+            for entry in entries.flatten() {
+                if let Some(stem) = entry.path().file_stem().and_then(|s| s.to_str()) {
+                    if !valid_ids.contains(stem) {
+                        let _ = fs::remove_file(entry.path());
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -470,24 +528,257 @@ async fn update_asset_tags(
 }
 
 #[tauri::command]
-async fn delete_asset(state: State<'_, AppState>, id: String) -> Result<(), String> {
+async fn delete_asset(state: State<'_, AppState>, id: String) -> Result<String, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
 
-    let preview_path: Option<String> = conn
-        .query_row(
-            "SELECT preview_path FROM assets WHERE id = ?1",
-            params![id],
-            |row| row.get(0),
-        )
-        .ok();
+    let asset_data = conn.query_row(
+        "SELECT id, original_path, preview_path, kind, dominant_colors, tags, size_bytes, file_name, extension, last_modified_os, width, height, created_at, content_snippet, is_broken, file_hash FROM assets WHERE id = ?1",
+        params![id],
+        |row| {
+            Ok(DeleteOperationData {
+                id: row.get(0)?,
+                original_path: row.get(1)?,
+                preview_path: row.get(2)?,
+                kind: row.get(3)?,
+                dominant_colors: row.get(4)?,
+                tags: row.get(5)?,
+                size_bytes: row.get(6)?,
+                file_name: row.get(7)?,
+                extension: row.get(8)?,
+                last_modified_os: row.get(9)?,
+                width: row.get(10)?,
+                height: row.get(11)?,
+                created_at: row.get(12)?,
+                content_snippet: row.get(13)?,
+                is_broken: row.get(14)?,
+                file_hash: row.get(15)?,
+                deleted_from_device: false,
+            })
+        },
+    ).map_err(|e| format!("Asset not found: {}", e))?;
 
-    if let Some(path) = preview_path {
-        let _ = fs::remove_file(path);
+    let op_id = format!("op_{}", Uuid::new_v4());
+
+    let details_json = serde_json::to_string(&asset_data).unwrap_or_default();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let _ = conn.execute(
+        "INSERT INTO operation_log (id, op_type, timestamp, details_json) VALUES (?1, 'delete', ?2, ?3)",
+        params![op_id, timestamp, details_json],
+    );
+
+    // For library-only deletion, keep thumbnail on disk so undo is seamless
+    conn.execute("DELETE FROM assets WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+
+    Ok(op_id)
+}
+
+#[tauri::command]
+async fn delete_asset_device(state: State<'_, AppState>, id: String) -> Result<String, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    let asset_data = conn.query_row(
+        "SELECT id, original_path, preview_path, kind, dominant_colors, tags, size_bytes, file_name, extension, last_modified_os, width, height, created_at, content_snippet, is_broken, file_hash FROM assets WHERE id = ?1",
+        params![id],
+        |row| {
+            Ok(DeleteOperationData {
+                id: row.get(0)?,
+                original_path: row.get(1)?,
+                preview_path: row.get(2)?,
+                kind: row.get(3)?,
+                dominant_colors: row.get(4)?,
+                tags: row.get(5)?,
+                size_bytes: row.get(6)?,
+                file_name: row.get(7)?,
+                extension: row.get(8)?,
+                last_modified_os: row.get(9)?,
+                width: row.get(10)?,
+                height: row.get(11)?,
+                created_at: row.get(12)?,
+                content_snippet: row.get(13)?,
+                is_broken: row.get(14)?,
+                file_hash: row.get(15)?,
+                deleted_from_device: true,
+            })
+        },
+    ).map_err(|e| format!("Asset not found: {}", e))?;
+
+    let op_id = format!("op_{}", Uuid::new_v4());
+
+    let details_json = serde_json::to_string(&asset_data).unwrap_or_default();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let _ = conn.execute(
+        "INSERT INTO operation_log (id, op_type, timestamp, details_json) VALUES (?1, 'delete', ?2, ?3)",
+        params![op_id, timestamp, details_json],
+    );
+
+    // Keep thumbnail on disk for undo — orphans cleaned by DB recalculate
+
+    // Move original file to OS Trash Bin / Recycle Bin
+    let orig_path = Path::new(&asset_data.original_path);
+    if orig_path.exists() {
+        if let Ok(meta) = fs::metadata(orig_path) {
+            let mut perms = meta.permissions();
+            if perms.readonly() {
+                perms.set_readonly(false);
+                let _ = fs::set_permissions(orig_path, perms);
+            }
+        }
+        if let Err(e) = trash::delete(orig_path) {
+            println!("trash::delete failed ({}), falling back to remove_file", e);
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            if let Err(retry_err) = fs::remove_file(orig_path) {
+                println!("Failed to remove file from device: {}", retry_err);
+                return Err(format!("Could not move file to trash: {}", retry_err));
+            }
+        }
     }
 
     conn.execute("DELETE FROM assets WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
-    Ok(())
+
+    Ok(op_id)
+}
+
+#[tauri::command]
+async fn log_import_operation(
+    state: State<'_, AppState>,
+    asset_ids: Vec<String>,
+    copied_paths: Vec<String>,
+) -> Result<String, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let op_id = format!("op_{}", Uuid::new_v4());
+    let data = ImportOperationData {
+        asset_ids,
+        copied_paths,
+    };
+    let details_json = serde_json::to_string(&data).unwrap_or_default();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    conn.execute(
+        "INSERT INTO operation_log (id, op_type, timestamp, details_json) VALUES (?1, 'import', ?2, ?3)",
+        params![op_id, timestamp, details_json],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(op_id)
+}
+
+#[tauri::command]
+async fn undo_last_operation(
+    state: State<'_, AppState>,
+    op_id: Option<String>,
+) -> Result<UndoResult, String> {
+    let config = state.config.clone();
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    let row = if let Some(ref id) = op_id {
+        conn.query_row(
+            "SELECT id, op_type, details_json FROM operation_log WHERE id = ?1",
+            params![id],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)),
+        ).ok()
+    } else {
+        conn.query_row(
+            "SELECT id, op_type, details_json FROM operation_log ORDER BY timestamp DESC LIMIT 1",
+            (),
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)),
+        ).ok()
+    };
+
+    let (found_op_id, op_type, details_json) = match row {
+        Some(tuple) => tuple,
+        None => return Err("No operation to undo.".to_string()),
+    };
+
+    if op_type == "delete" {
+        if let Ok(asset_data) = serde_json::from_str::<DeleteOperationData>(&details_json) {
+            conn.execute(
+                "INSERT OR REPLACE INTO assets (id, original_path, preview_path, kind, dominant_colors, tags, size_bytes, file_name, extension, last_modified_os, width, height, created_at, content_snippet, is_broken, file_hash)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                params![
+                    asset_data.id,
+                    asset_data.original_path,
+                    asset_data.preview_path,
+                    asset_data.kind,
+                    asset_data.dominant_colors,
+                    asset_data.tags,
+                    asset_data.size_bytes,
+                    asset_data.file_name,
+                    asset_data.extension,
+                    asset_data.last_modified_os,
+                    asset_data.width,
+                    asset_data.height,
+                    asset_data.created_at,
+                    asset_data.content_snippet,
+                    asset_data.is_broken,
+                    asset_data.file_hash,
+                ],
+            ).map_err(|e| e.to_string())?;
+
+            // Restore thumbnail if it doesn't exist on disk
+            let has_thumb = asset_data.preview_path.as_ref().map(|p| Path::new(p).exists()).unwrap_or(false);
+            if !has_thumb {
+                let orig_path = Path::new(&asset_data.original_path);
+                if orig_path.exists() {
+                    if let Ok(img) = image::open(orig_path) {
+                        let new_thumb_path = save_thumbnail(&img, &asset_data.id, &config);
+                        if let Some(tp) = new_thumb_path {
+                            let _ = conn.execute("UPDATE assets SET preview_path = ?1 WHERE id = ?2", params![tp, asset_data.id]);
+                        }
+                    }
+                }
+            }
+
+            let _ = conn.execute("DELETE FROM operation_log WHERE id = ?1", params![found_op_id]);
+
+            return Ok(UndoResult {
+                op_type: "delete".to_string(),
+                count: 1,
+            });
+        }
+    } else if op_type == "import" {
+        if let Ok(import_data) = serde_json::from_str::<ImportOperationData>(&details_json) {
+            for asset_id in &import_data.asset_ids {
+                let _ = conn.execute("DELETE FROM assets WHERE id = ?1", params![asset_id]);
+
+                let thumb_path = Path::new(&config.library_path)
+                    .join("thumbnails")
+                    .join(format!("{}.jpg", asset_id));
+                if thumb_path.exists() {
+                    let _ = fs::remove_file(thumb_path);
+                }
+            }
+
+            for copied_path in &import_data.copied_paths {
+                let p = Path::new(copied_path);
+                if p.exists() {
+                    let _ = fs::remove_file(p);
+                }
+            }
+
+            let _ = conn.execute("DELETE FROM operation_log WHERE id = ?1", params![found_op_id]);
+
+            return Ok(UndoResult {
+                op_type: "import".to_string(),
+                count: import_data.asset_ids.len(),
+            });
+        }
+    }
+
+    let _ = conn.execute("DELETE FROM operation_log WHERE id = ?1", params![found_op_id]);
+    Err("Failed to execute undo.".to_string())
 }
 
 #[tauri::command]
@@ -647,6 +938,9 @@ pub fn run() {
             get_top_tags,
             update_asset_tags,
             delete_asset,
+            delete_asset_device,
+            log_import_operation,
+            undo_last_operation,
             rename_asset,
             open_in_folder,
             processing::read_full_text_file,

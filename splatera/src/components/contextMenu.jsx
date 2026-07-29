@@ -68,7 +68,10 @@ export default function ContextMenu({ isOpen, setIsOpen, x, y, onAction, kind })
           <Edit3 size={14} /> Rename
         </div>
         <div className="context-menu-item danger" onClick={() => onAction('delete')}>
-          <Trash2 size={14} /> Delete from Library
+          <Trash2 size={14} /> Delete from library
+        </div>
+        <div className="context-menu-item danger" onClick={() => onAction('delete_device')}>
+          <Trash2 size={14} /> Delete from device
         </div>
       </div>
     </FloatingPortal>

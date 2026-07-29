@@ -105,7 +105,7 @@ function App() {
 
   const showTemporaryNotif = (title, desc, opts = {}) => {
     if (notifTimeout.current) clearTimeout(notifTimeout.current);
-    setNotif({ show: true, title, desc, progress: null, undoId: opts.undoId ?? null });
+    setNotif({ show: true, title, desc, progress: opts.progress ?? null, undoId: opts.undoId ?? null });
     notifTimeout.current = setTimeout(() => {
       setNotif(prev => ({ ...prev, show: false }));
       undoRef.current = null;
@@ -137,12 +137,19 @@ function App() {
     const totalPaths = expandedFiles.length;
     let totalAssetsProcessed = 0;
 
+    const createdAssetIds = [];
+    const copiedPaths = [];
+
     for (let i = 0; i < totalPaths; i++) {
       let { path, tags, batchName } = expandedFiles[i];
       try {
         if (saveLocally) {
           try {
-            path = await invoke('copy_to_local_library', { path });
+            const localPath = await invoke('copy_to_local_library', { path });
+            if (localPath !== path) {
+              copiedPaths.push(localPath);
+              path = localPath;
+            }
           } catch (copyErr) {
             console.error("Failed to copy file locally, falling back to original path:", copyErr);
           }
@@ -150,6 +157,7 @@ function App() {
         const assets = await invoke('process_asset', { path });
         for (const assetInfo of assets) {
           totalAssetsProcessed++;
+          createdAssetIds.push(assetInfo.id);
           if (tags.length > 0) {
             const mergedTags = [...new Set([...assetInfo.tags, ...tags])];
             await invoke('update_asset_tags', { id: assetInfo.id, tags: mergedTags });
@@ -176,8 +184,20 @@ function App() {
       }
     }
 
+    let importOpId = null;
+    if (createdAssetIds.length > 0) {
+      try {
+        importOpId = await invoke('log_import_operation', { assetIds: createdAssetIds, copiedPaths });
+      } catch (logErr) {
+        console.error('Failed to log import operation:', logErr);
+      }
+    }
+
     setRefreshTrigger(prev => prev + 1);
-    showTemporaryNotif('Process Complete', `Successfully imported ${totalAssetsProcessed} files.`);
+    showTemporaryNotif('Process Complete', `Successfully imported ${totalAssetsProcessed} files.`, {
+      undoId: importOpId,
+      duration: 6000
+    });
   };
 
   const loadLibrary = useCallback(async (tag, search, tags, color, date, sort, currentOffset = 0, append = false) => {
@@ -357,13 +377,18 @@ function App() {
       const idx = imagesRef.current.findIndex(img => img.id === e.detail.id);
       setLightboxIndex(idx >= 0 ? idx : 0);
     };
-    const handleGlobalNotif = (e) => showTemporaryNotif(e.detail.title, e.detail.desc);
+    const handleGlobalNotif = (e) => {
+      const { title, desc, undoId, progress, duration } = e.detail;
+      showTemporaryNotif(title, desc, { undoId, progress, duration });
+    };
     // Optimistic delete dispatched from card.jsx
     const handleOptimisticDelete = (e) => {
-      const { id, image } = e.detail;
+      const { id, image, opId, isDevice } = e.detail;
       setImages(prev => prev.filter(img => img.id !== id));
-      undoRef.current = { id, image };
-      showTemporaryNotif('Asset Removed', `"${image.name}" deleted. Undo?`, { undoId: id, duration: 4000 });
+      undoRef.current = { id, image, opId };
+      const title = isDevice ? 'Deleted from Device' : 'Asset Removed';
+      const desc = `"${image.name}" deleted. Undo?`;
+      showTemporaryNotif(title, desc, { undoId: opId, duration: 5000 });
     };
     window.addEventListener('optimistic-delete', handleOptimisticDelete);
     const handleImportFiles = (e) => {
@@ -433,15 +458,34 @@ function App() {
   const closeLightbox = useCallback(() => setLightboxIndex(null), []);
   const lightboxFile = lightboxIndex !== null ? deferredImages[lightboxIndex] : null;
 
-  // Undo delete handler
-  const handleUndo = () => {
-    if (!undoRef.current) return;
-    const { image } = undoRef.current;
-    // Re-insert at head (it was the most-recently deleted)
-    setImages(prev => [image, ...prev]);
-    undoRef.current = null;
-    if (notifTimeout.current) clearTimeout(notifTimeout.current);
-    setNotif(prev => ({ ...prev, show: false }));
+  // Undo operation handler
+  const handleUndo = async () => {
+    if (notif.undoId === 'test-undo') {
+      showTemporaryNotif('Action Aborted', 'Operation was successfully undone.');
+      return;
+    }
+    const savedImage = undoRef.current?.image;
+    const targetOpId = notif.undoId || undoRef.current?.opId;
+    try {
+      const res = await invoke('undo_last_operation', { opId: targetOpId || null });
+      if (res.op_type === 'delete') {
+        if (savedImage) {
+          setImages(prev => [savedImage, ...prev]);
+        }
+        showTemporaryNotif('Action Aborted', 'Asset restored to library.');
+      } else if (res.op_type === 'import') {
+        showTemporaryNotif('Import Undone', `Removed ${res.count} imported files.`);
+      }
+      setRefreshTrigger(prev => prev + 1);
+    } catch (err) {
+      console.error('Undo failed:', err);
+      if (savedImage) {
+        setImages(prev => [savedImage, ...prev]);
+        showTemporaryNotif('Restored', 'Restored in-memory asset view.');
+      }
+    } finally {
+      undoRef.current = null;
+    }
   };
 
   const handleToggleSnapHeader = async (nextValue) => {

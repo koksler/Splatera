@@ -153,14 +153,22 @@ function Card({ data, index, onOpenLightbox }) {
         break;
       case 'delete':
         try {
-          // Optimistic: remove from UI immediately, let App handle undo
-          window.dispatchEvent(new CustomEvent('optimistic-delete', { detail: { id: data.id, image: data } }));
-          await invoke('delete_asset', { id: data.id });
+          const opId = await invoke('delete_asset', { id: data.id });
+          window.dispatchEvent(new CustomEvent('optimistic-delete', { detail: { id: data.id, image: data, opId } }));
         } catch (err) {
           console.error('Failed to delete:', err);
-          // Re-add via reload if actual delete failed
           window.dispatchEvent(new CustomEvent('reload-library'));
           notify('Delete Failed', `Could not delete "${data.name}".`);
+        }
+        break;
+      case 'delete_device':
+        try {
+          const opId = await invoke('delete_asset_device', { id: data.id });
+          window.dispatchEvent(new CustomEvent('optimistic-delete', { detail: { id: data.id, image: data, opId, isDevice: true } }));
+        } catch (err) {
+          console.error('Failed to delete from device:', err);
+          window.dispatchEvent(new CustomEvent('reload-library'));
+          notify('Delete Failed', `Could not delete "${data.name}" from device.`);
         }
         break;
       default:
