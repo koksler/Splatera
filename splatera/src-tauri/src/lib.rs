@@ -1,7 +1,7 @@
 mod processing;
 use crate::processing::{
     Asset, AssetKind, FileMetadata, SimplifiedAsset, ALL_EXTENSIONS,
-    color_distance, compute_file_hash, extract_colors, extract_metadata, hex_to_rgb,
+    color_distance, compute_file_hash, extract_colors, extract_metadata, generate_video_thumbnail, hex_to_rgb,
     process_single_path, save_thumbnail,
 };
 
@@ -400,15 +400,14 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
                     }
                 }
                 if a.kind == AssetKind::Image {
-                    let thumb_missing = a
-                        .preview_path
-                        .as_ref()
-                        .map(|p| !Path::new(p).exists())
-                        .unwrap_or(true);
-                    if thumb_missing {
-                        if let Ok(img) = image::open(&a.original_path) {
-                            a.preview_path = save_thumbnail(&img, &a.id, &config);
+                    if let Ok(img) = image::open(&a.original_path) {
+                        if let Some(new_thumb) = save_thumbnail(&img, &a.id, &config) {
+                            a.preview_path = Some(new_thumb);
                         }
+                    }
+                } else if a.kind == AssetKind::Video {
+                    if let Some(new_thumb) = generate_video_thumbnail(Path::new(&a.original_path), &a.id, &config) {
+                        a.preview_path = Some(new_thumb);
                     }
                 }
                 if a.file_hash.is_none() || a.file_hash.as_deref() == Some("") {
