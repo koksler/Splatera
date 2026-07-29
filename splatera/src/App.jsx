@@ -342,19 +342,19 @@ function App() {
 
   const handleSaveTags = async (target, updatedTags) => {
     try {
-      if (typeof target === 'object' && target?.isBatch && Array.isArray(target.ids)) {
-        for (const id of target.ids) {
-          await invoke('update_asset_tags', { id, tags: updatedTags });
+      const idsToUpdate = target?.isBatch
+        ? target.ids
+        : [typeof target === 'string' ? target : target?.id];
+
+      if (idsToUpdate && idsToUpdate.length > 0) {
+        for (const id of idsToUpdate) {
+          if (id) {
+            await invoke('update_asset_tags', { id, tags: updatedTags });
+          }
         }
-        showTemporaryNotif('Tags Updated', `Tags saved for ${target.ids.length} assets.`);
-      } else {
-        const assetId = typeof target === 'string' ? target : target?.id;
-        if (assetId) {
-          await invoke('update_asset_tags', { id: assetId, tags: updatedTags });
-          showTemporaryNotif('Tags Updated', 'Tags saved successfully.');
-        }
+        showTemporaryNotif('Tags Updated', `Tags saved for ${idsToUpdate.length} asset${idsToUpdate.length === 1 ? '' : 's'}.`);
+        setRefreshTrigger(prev => prev + 1);
       }
-      setRefreshTrigger(prev => prev + 1);
     } catch (err) {
       console.error('Failed to update tags:', err);
       showTemporaryNotif('Error', 'Failed to save tags.');
@@ -368,6 +368,7 @@ function App() {
     setTagData({
       isBatch: true,
       ids: assetsToTag.map(a => a.id),
+      assets: assetsToTag,
       tags: combinedTags,
       name: `${assetsToTag.length} selected assets`,
     });

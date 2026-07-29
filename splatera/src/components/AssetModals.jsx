@@ -102,14 +102,31 @@ export default function AssetModals({
       }
     } else if (isEditMode && tagData) {
       setTags(tagData.tags || tagData.currentTags || []);
-      const isCodeOrText = tagData.kind === 'Code' || tagData.kind === 'Text';
-      const ext = tagData.name ? tagData.name.split('.').pop().toLowerCase() : '';
-      setPreviewExt(ext);
 
-      if (!isCodeOrText && (tagData.preview || (tagData.path ? convertFileSrc(tagData.path) : null))) {
-        setPreviewUrl(tagData.preview || convertFileSrc(tagData.path));
-      } else if (isCodeOrText && tagData.contentSnippet) {
-        setPreviewCode(tagData.contentSnippet);
+      const targetAsset = tagData.isBatch && tagData.assets && tagData.assets.length > 0
+        ? tagData.assets[0]
+        : tagData;
+
+      if (targetAsset) {
+        const isCodeOrText = targetAsset.kind === 'Code' || targetAsset.kind === 'Text';
+        const ext = targetAsset.name ? targetAsset.name.split('.').pop().toLowerCase() : '';
+        const isVid = targetAsset.kind === 'Video' || VIDEO_EXTS.includes(`.${ext}`);
+        setPreviewExt(ext);
+        setIsVideo(isVid);
+
+        const mediaUrl = targetAsset.preview || (targetAsset.path ? convertFileSrc(targetAsset.path) : '');
+
+        if (!isCodeOrText && mediaUrl) {
+          setPreviewUrl(mediaUrl);
+        } else if (isCodeOrText) {
+          if (targetAsset.contentSnippet) {
+            setPreviewCode(targetAsset.contentSnippet);
+          } else if (targetAsset.path) {
+            invoke('read_full_text_file', { path: targetAsset.path })
+              .then((text) => setPreviewCode(text.split('\n').slice(0, 25).join('\n')))
+              .catch(console.error);
+          }
+        }
       }
     }
   }, [currentIndex, currentItem, mode, tagData]);
@@ -169,13 +186,18 @@ export default function AssetModals({
 
   const handleConfirmEditTags = () => {
     if (onSave && tagData) {
-      onSave(tagData.id, tags);
+      onSave(tagData, tags);
     }
   };
 
   // Dynamic Header Title
   const getHeaderTitle = () => {
-    if (isEditMode) return "Here’s all the tags, let’s edit them";
+    if (isEditMode) {
+      if (tagData?.isBatch && tagData?.assets?.length) {
+        return `Editing tags for ${tagData.assets.length} assets`;
+      }
+      return "Here’s all the tags, let’s edit them";
+    }
     if (assets.length > 1) return `Importing ${assets.length} assets`;
     return "Importing 1 asset";
   };
@@ -229,28 +251,28 @@ export default function AssetModals({
               )}
             </div>
 
-            {/* Thumbnails Row (when multiple assets) */}
-            {isMultipleImport && (
+            {/* Thumbnails Row (when multiple assets in import mode or batch edit mode) */}
+            {((isImportMode && isMultipleImport) || (isEditMode && tagData?.isBatch && tagData?.assets?.length > 1)) && (
               <div className="asset-modal-thumbs-row">
-                {remainingAssets.slice(0, 3).map((item, idx) => {
+                {(isImportMode ? remainingAssets : tagData.assets.slice(1)).slice(0, 3).map((item, idx) => {
                   const itemPath = typeof item === 'string' ? item : item?.path;
-                  const ext = itemPath?.slice(itemPath.lastIndexOf('.')).toLowerCase();
-                  const isVid = VIDEO_EXTS.includes(ext);
-                  const srcUrl = convertFileSrc(itemPath);
+                  const itemPreview = item?.preview || (itemPath ? convertFileSrc(itemPath) : '');
+                  const ext = item?.name ? item.name.split('.').pop().toLowerCase() : (itemPath?.slice(itemPath.lastIndexOf('.')).toLowerCase().replace('.', '') || '');
+                  const isVid = item?.kind === 'Video' || VIDEO_EXTS.includes(`.${ext}`);
 
                   return (
                     <AssetSquare
                       key={idx}
-                      src={srcUrl}
+                      src={itemPreview}
                       isVideo={isVid}
                     />
                   );
                 })}
 
-                {remainingAssets.length > 4 && (
+                {(isImportMode ? remainingAssets : tagData.assets.slice(1)).length > 3 && (
                   <AssetSquare
                     isBlob
-                    blobCount={remainingAssets.length - 3}
+                    blobCount={(isImportMode ? remainingAssets : tagData.assets.slice(1)).length - 3}
                   />
                 )}
               </div>
