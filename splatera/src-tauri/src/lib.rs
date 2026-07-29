@@ -1,8 +1,8 @@
 mod processing;
 use crate::processing::{
     Asset, AssetKind, FileMetadata, SimplifiedAsset, ALL_EXTENSIONS,
-    color_distance, compute_file_hash, extract_colors, extract_metadata, generate_video_thumbnail, hex_to_rgb,
-    process_single_path, save_thumbnail,
+    color_distance, compute_file_hash, extract_colors, extract_metadata, generate_video_thumbnail,
+    get_video_dimensions, hex_to_rgb, process_single_path, save_thumbnail,
 };
 
 use arboard::Clipboard;
@@ -267,12 +267,21 @@ fn get_library(
         let colors_json: String = row.get(4).unwrap_or("[]".to_string());
         let dominant_colors: Vec<String> = serde_json::from_str(&colors_json).unwrap_or_default();
 
+        let original_path: String = row.get(1).unwrap_or_default();
         let mut preview_path: Option<String> = row.get(2).ok();
-        if let Some(preview) = &preview_path {
-            if preview.starts_with("./") {
-                let absolute = lib_path.join(&preview[2..]);
-                preview_path = Some(absolute.to_string_lossy().into_owned());
+        if let Some(ref preview) = preview_path {
+            let p = if preview.starts_with("./") {
+                lib_path.join(&preview[2..])
+            } else {
+                Path::new(preview).to_path_buf()
+            };
+            if !p.exists() {
+                preview_path = Some(original_path.clone());
+            } else {
+                preview_path = Some(p.to_string_lossy().into_owned());
             }
+        } else {
+            preview_path = Some(original_path.clone());
         }
 
         let asset = SimplifiedAsset {
@@ -390,8 +399,10 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
     let valid = tokio::task::spawn_blocking(move || {
         let mut result = Vec::new();
         for mut a in assets {
-            if Path::new(&a.original_path).exists() {
-                if let Ok(meta) = extract_metadata(Path::new(&a.original_path)) {
+            let orig_path = Path::new(&a.original_path);
+            if orig_path.exists() {
+                a.is_broken = false;
+                if let Ok(meta) = extract_metadata(orig_path) {
                     a.metadata = meta;
                 }
                 for tag in a.kind.default_tags() {
@@ -400,21 +411,35 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
                     }
                 }
                 if a.kind == AssetKind::Image {
-                    if let Ok(img) = image::open(&a.original_path) {
+                    if let Ok(img) = image::open(orig_path) {
+                        if a.width == 0 || a.height == 0 {
+                            a.width = img.width();
+                            a.height = img.height();
+                        }
+                        if a.dominant_colors.is_empty() {
+                            a.dominant_colors = extract_colors(&img);
+                        }
                         if let Some(new_thumb) = save_thumbnail(&img, &a.id, &config) {
                             a.preview_path = Some(new_thumb);
                         }
                     }
                 } else if a.kind == AssetKind::Video {
-                    if let Some(new_thumb) = generate_video_thumbnail(Path::new(&a.original_path), &a.id, &config) {
+                    if a.width == 0 || a.height == 0 {
+                        let (w, h) = get_video_dimensions(orig_path);
+                        a.width = w;
+                        a.height = h;
+                    }
+                    if let Some(new_thumb) = generate_video_thumbnail(orig_path, &a.id, &config) {
                         a.preview_path = Some(new_thumb);
                     }
                 }
                 if a.file_hash.is_none() || a.file_hash.as_deref() == Some("") {
-                    a.file_hash = compute_file_hash(Path::new(&a.original_path)).ok();
+                    a.file_hash = compute_file_hash(orig_path).ok();
                 }
-                result.push(a);
+            } else {
+                a.is_broken = true;
             }
+            result.push(a);
         }
         Ok::<Vec<Asset>, String>(result)
     })

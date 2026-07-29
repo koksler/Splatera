@@ -41,6 +41,7 @@ const mapAsset = (assetInfo) => {
     id: assetInfo.id,
     name: assetInfo.file_name,
     path: assetInfo.original_path,
+    originalSrc: assetInfo.original_path ? convertFileSrc(assetInfo.original_path) : '',
     preview: assetInfo.preview_path ? convertFileSrc(assetInfo.preview_path) : '',
     tags: (assetInfo.tags || []).map(formatTag),
     kind: assetInfo.kind,

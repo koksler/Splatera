@@ -5,12 +5,25 @@ import './AssetSquare.css';
 
 export default function AssetSquare({
   src,
+  fallbackSrc,
   isVideo = false,
   isBlob = false,
   blobCount = 0,
   className = '',
   onClose,
 }) {
+  const [imgSrc, setImgSrc] = React.useState(src);
+
+  React.useEffect(() => {
+    setImgSrc(src);
+  }, [src]);
+
+  const handleImgError = () => {
+    if (fallbackSrc && imgSrc !== fallbackSrc) {
+      setImgSrc(fallbackSrc);
+    }
+  };
+
   if (isBlob) {
     return (
       <div className={`asset-square is-blob ${className}`}>
@@ -35,15 +48,21 @@ export default function AssetSquare({
       )}
       {isVideo ? (
         <video
-          src={src}
+          src={imgSrc}
           className="asset-square-media"
           muted
           autoPlay
           loop
           playsInline
+          onError={handleImgError}
         />
       ) : (
-        <img src={src} alt="thumbnail" className="asset-square-media" />
+        <img
+          src={imgSrc}
+          alt="thumbnail"
+          className="asset-square-media"
+          onError={handleImgError}
+        />
       )}
       <div className="asset-square-overlay" />
     </div>

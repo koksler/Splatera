@@ -141,9 +141,10 @@ pub fn save_thumbnail(img: &image::DynamicImage, asset_id: &str, config: &AppCon
         config.thumbnail_size,
         FilterType::Lanczos3,
     );
-    let path = Path::new(&config.library_path)
-        .join("thumbnails")
-        .join(format!("{}.jpg", asset_id));
+    let thumb_dir = Path::new(&config.library_path).join("thumbnails");
+    let _ = fs::create_dir_all(&thumb_dir);
+
+    let path = thumb_dir.join(format!("{}.jpg", asset_id));
     thumb.into_rgb8().save(&path).ok()?;
     Some(path.to_string_lossy().into_owned())
 }
@@ -287,9 +288,10 @@ pub fn generate_video_thumbnail(
     #[cfg(target_os = "windows")]
     use std::os::windows::process::CommandExt;
 
-    let thumb_path = Path::new(&config.library_path)
-        .join("thumbnails")
-        .join(format!("{}.jpg", asset_id));
+    let thumb_dir = Path::new(&config.library_path).join("thumbnails");
+    let _ = fs::create_dir_all(&thumb_dir);
+
+    let thumb_path = thumb_dir.join(format!("{}.jpg", asset_id));
 
     let video_path_str = video_path.to_string_lossy();
     let thumb_path_str = thumb_path.to_string_lossy();

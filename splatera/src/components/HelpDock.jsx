@@ -72,7 +72,8 @@ export default function HelpDock({
             return (
               <AssetSquare
                 key={asset.id}
-                src={asset.preview || asset.path}
+                src={asset.preview || asset.originalSrc}
+                fallbackSrc={asset.originalSrc}
                 isVideo={isVideo}
                 onClose={() => onUnselectAsset && onUnselectAsset(asset.id)}
               />
