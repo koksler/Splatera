@@ -607,20 +607,13 @@ async fn delete_asset_device(state: State<'_, AppState>, id: String) -> Result<S
         },
     ).map_err(|e| format!("Asset not found: {}", e))?;
 
-    let op_id = format!("op_{}", Uuid::new_v4());
-
-    let details_json = serde_json::to_string(&asset_data).unwrap_or_default();
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-
-    let _ = conn.execute(
-        "INSERT INTO operation_log (id, op_type, timestamp, details_json) VALUES (?1, 'delete', ?2, ?3)",
-        params![op_id, timestamp, details_json],
-    );
-
-    // Keep thumbnail on disk for undo — orphans cleaned by DB recalculate
+    // Remove preview thumbnail
+    if let Some(ref path) = asset_data.preview_path {
+        let p = Path::new(path);
+        if p.exists() {
+            let _ = fs::remove_file(p);
+        }
+    }
 
     // Move original file to OS Trash Bin / Recycle Bin
     let orig_path = Path::new(&asset_data.original_path);
@@ -645,7 +638,7 @@ async fn delete_asset_device(state: State<'_, AppState>, id: String) -> Result<S
     conn.execute("DELETE FROM assets WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
 
-    Ok(op_id)
+    Ok("deleted".to_string())
 }
 
 #[tauri::command]

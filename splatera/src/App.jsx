@@ -385,10 +385,13 @@ function App() {
     const handleOptimisticDelete = (e) => {
       const { id, image, opId, isDevice } = e.detail;
       setImages(prev => prev.filter(img => img.id !== id));
-      undoRef.current = { id, image, opId };
-      const title = isDevice ? 'Deleted from Device' : 'Asset Removed';
-      const desc = `"${image.name}" deleted. Undo?`;
-      showTemporaryNotif(title, desc, { undoId: opId, duration: 5000 });
+      if (isDevice) {
+        undoRef.current = null;
+        showTemporaryNotif('Deleted from Device', 'Asset(s) have been moved to the trash bin', { undoId: null, duration: 3500 });
+      } else {
+        undoRef.current = { id, image, opId };
+        showTemporaryNotif('Asset Removed', `"${image.name}" removed from library. Undo?`, { undoId: opId, duration: 5000 });
+      }
     };
     window.addEventListener('optimistic-delete', handleOptimisticDelete);
     const handleImportFiles = (e) => {
