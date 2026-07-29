@@ -5,8 +5,10 @@
   border-radius: 12px;
   overflow: hidden;
   /* Only composite transform — no paint-triggering properties */
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease;
   user-select: none;
+  -webkit-user-select: none;
+  outline: none;
   cursor: grab;
   /* GPU acceleration hint */
   transform: translateZ(0);
@@ -18,10 +20,26 @@
   contain-intrinsic-size: auto 280px;
 }
 
-.splatera-card:hover {
+.splatera-card:focus,
+.splatera-card:focus-visible,
+.splatera-card:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.splatera-card:hover,
+.splatera-card.is-selected {
   border-color: var(--color-accent);
   /* Promote to its own GPU layer only when hovering */
   will-change: transform;
+}
+
+.card-dim-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  z-index: 4;
 }
 
 .splatera-card img {
@@ -96,3 +114,9 @@
   transform: scale(0.9);
   will-change: width, height, left, top;
 }
+
+/* Selection state visual feedback */
+.splatera-card.is-selected {
+  border-color: var(--color-accent) !important;
+  border-width: 1px;
+}

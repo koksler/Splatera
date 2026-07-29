@@ -2,11 +2,21 @@ import React from 'react';
 import { Copy, Maximize } from 'lucide-react';
 import Button from './button';
 import Label from './label';
+import Radio from './radio';
 import './cardPopup.css';
 
-export default function CardPopup({ title, dateText, tags = [], onCopy, onMaximize, onManageTags }) {
-  const visibleTags = tags.slice(0, 2);
-  const hiddenTagsCount = tags.length - 2;
+export default function CardPopup({
+  title,
+  dateText,
+  tags = [],
+  isSelected = false,
+  onToggleSelect,
+  onCopy,
+  onMaximize,
+  onManageTags,
+}) {
+  const visibleTags = tags.slice(0, 1);
+  const hiddenTagsCount = tags.length - 1;
 
   const displayTitle = typeof title === 'string' && title.length > 50
     ? title.slice(0, 50) + '...'
@@ -14,6 +24,14 @@ export default function CardPopup({ title, dateText, tags = [], onCopy, onMaximi
 
   return (
     <div className="splatera-card-popup">
+      <Radio
+        checked={isSelected}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (onToggleSelect) onToggleSelect(e);
+        }}
+      />
+
       <div className="popup-info">
         <span className="popup-title">{displayTitle}</span>
         <span className="popup-date">{dateText}</span>
@@ -22,7 +40,10 @@ export default function CardPopup({ title, dateText, tags = [], onCopy, onMaximi
       <div className="popup-actions">
         {/* Wrap tags in a clickable container */}
         <div 
-          onClick={onManageTags} 
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onManageTags) onManageTags(e);
+          }} 
           style={{ display: 'flex', gap: '5px', cursor: 'pointer' }}
           title="Click to manage tags"
         >

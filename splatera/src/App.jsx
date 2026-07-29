@@ -15,6 +15,8 @@ import DropOverlay from './components/dropOverlay';
 import TagManager from './components/tagManager';
 import ImportModal from './components/importModal';
 import ErrorBoundary from './components/errorBoundary';
+import HelpDock from './components/HelpDock';
+
 
 const SKELETON_ITEMS = Array.from({ length: 12 }).map((_, i) => ({
   id: `skeleton-${i}`,
@@ -88,6 +90,56 @@ function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [snapHeader, setSnapHeader] = useState(false);
   const settingsRef = useRef({});
+
+  const [selectedAssetIds, setSelectedAssetIds] = useState(new Set());
+  const lastSelectedIndexRef = useRef(null);
+
+  const toggleSelectAsset = useCallback((asset, index, isShiftPressed) => {
+    setSelectedAssetIds((prev) => {
+      const next = new Set(prev);
+
+      if (isShiftPressed && lastSelectedIndexRef.current !== null && typeof index === 'number') {
+        const start = Math.min(lastSelectedIndexRef.current, index);
+        const end = Math.max(lastSelectedIndexRef.current, index);
+        for (let i = start; i <= end; i++) {
+          if (images[i] && images[i].id) {
+            next.add(images[i].id);
+          }
+        }
+      } else {
+        if (next.has(asset.id)) {
+          next.delete(asset.id);
+        } else {
+          next.add(asset.id);
+        }
+      }
+
+      return next;
+    });
+
+    if (typeof index === 'number') {
+      lastSelectedIndexRef.current = index;
+    }
+  }, [images]);
+
+  const unselectAsset = useCallback((id) => {
+    setSelectedAssetIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedAssetIds(new Set());
+    lastSelectedIndexRef.current = null;
+  }, []);
+
+  const selectedAssets = useMemo(() => {
+    if (selectedAssetIds.size === 0) return [];
+    return images.filter((img) => selectedAssetIds.has(img.id));
+  }, [images, selectedAssetIds]);
+
 
   // Pagination state
   const [offset, setOffset] = useState(0);
@@ -288,17 +340,62 @@ function App() {
     setRenameData(null);
   };
 
-  const handleSaveTags = async (assetId, updatedTags) => {
+  const handleSaveTags = async (target, updatedTags) => {
     try {
-      await invoke('update_asset_tags', { id: assetId, tags: updatedTags });
+      if (typeof target === 'object' && target?.isBatch && Array.isArray(target.ids)) {
+        for (const id of target.ids) {
+          await invoke('update_asset_tags', { id, tags: updatedTags });
+        }
+        showTemporaryNotif('Tags Updated', `Tags saved for ${target.ids.length} assets.`);
+      } else {
+        const assetId = typeof target === 'string' ? target : target?.id;
+        if (assetId) {
+          await invoke('update_asset_tags', { id: assetId, tags: updatedTags });
+          showTemporaryNotif('Tags Updated', 'Tags saved successfully.');
+        }
+      }
       setRefreshTrigger(prev => prev + 1);
-      showTemporaryNotif('Tags Updated', 'Tags saved successfully.');
     } catch (err) {
       console.error('Failed to update tags:', err);
       showTemporaryNotif('Error', 'Failed to save tags.');
     }
     setTagData(null);
   };
+
+  const handleBatchTag = useCallback((assetsToTag) => {
+    if (!assetsToTag || assetsToTag.length === 0) return;
+    const combinedTags = Array.from(new Set(assetsToTag.flatMap(a => a.tags || [])));
+    setTagData({
+      isBatch: true,
+      ids: assetsToTag.map(a => a.id),
+      tags: combinedTags,
+      name: `${assetsToTag.length} selected assets`,
+    });
+  }, []);
+
+  const handleBatchDelete = useCallback(async (assetsToDelete) => {
+    if (!assetsToDelete || assetsToDelete.length === 0) return;
+    const deletedIds = new Set(assetsToDelete.map(a => a.id));
+
+    // Optimistically update UI
+    setImages(prev => prev.filter(img => !deletedIds.has(img.id)));
+    clearSelection();
+
+    let lastOpId = null;
+    let successCount = 0;
+    for (const asset of assetsToDelete) {
+      try {
+        const opId = await invoke('delete_asset', { id: asset.id });
+        lastOpId = opId;
+        successCount++;
+      } catch (err) {
+        console.error(`Failed to delete asset ${asset.id}:`, err);
+      }
+    }
+
+    setRefreshTrigger(prev => prev + 1);
+    showTemporaryNotif('Assets Removed', `${successCount} file(s) removed from library.`, { undoId: lastOpId, duration: 5000 });
+  }, [clearSelection]);
 
   const startImportFlow = async (filePaths) => {
     if (!filePaths || filePaths.length === 0) return;
@@ -517,7 +614,7 @@ function App() {
   };
 
   return (
-    <div className={`app-container ${isDragging ? 'dragging' : ''}`}>
+    <div className={`app-container ${isDragging ? 'dragging' : ''} ${selectedAssetIds.size > 0 ? 'has-selection' : ''}`}>
       <Header
         selectedColor={selectedColor}
         clearColor={() => setSelectedColor(null)}
@@ -568,6 +665,8 @@ function App() {
             loadMore={loadMore}
             hasMore={hasMore}
             onOpenLightbox={openLightbox}
+            selectedAssetIds={selectedAssetIds}
+            onToggleSelect={toggleSelectAsset}
           />
         )}
       </div>
@@ -607,8 +706,17 @@ function App() {
           }}
         />
       )}
+
+      <HelpDock
+        selectedAssets={selectedAssets}
+        onUnselectAsset={unselectAsset}
+        onClearSelection={clearSelection}
+        onBatchTag={handleBatchTag}
+        onBatchDelete={handleBatchDelete}
+      />
     </div>
   );
+
 }
 
 // ─── Justified layout positioner ─────────────────────────────────────────────
@@ -683,7 +791,7 @@ const useJustifiedPositioner = ({ width, items = [], gutter = 15, targetHeight =
 
 // ─── LibraryGrid ─────────────────────────────────────────────────────────────
 
-const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore, onOpenLightbox }) => {
+const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore, onOpenLightbox, selectedAssetIds, onToggleSelect }) => {
   const containerRef = useRef(null);
   const resizeTimer = useRef(null);
   const loaderRef = useRef(null);
@@ -765,11 +873,20 @@ const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore, 
   const activePositioner = viewMode === 'horizontal' ? justifiedPositioner : positioner;
   positionerRef.current = activePositioner;
 
-  // Pass onOpenLightbox to each card via render prop
+  // Pass onOpenLightbox, isSelected, onToggleSelect, and hasSelection to each card via render prop
   const renderCard = useCallback(
-    (props) => <Card {...props} onOpenLightbox={onOpenLightbox} />,
-    [onOpenLightbox]
+    (props) => (
+      <Card
+        {...props}
+        onOpenLightbox={onOpenLightbox}
+        isSelected={selectedAssetIds?.has(props.data?.id)}
+        onToggleSelect={onToggleSelect}
+        hasSelection={selectedAssetIds?.size > 0}
+      />
+    ),
+    [onOpenLightbox, selectedAssetIds, onToggleSelect]
   );
+
 
   return (
     <div ref={containerRef} className="masonry-wrapper" style={{ minHeight: '100vh', width: '100%' }}>

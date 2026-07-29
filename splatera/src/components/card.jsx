@@ -36,12 +36,28 @@ const notify = (title, desc) => {
 };
 
 export default memo(Card);
-function Card({ data, index, onOpenLightbox }) {
+function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSelection }) {
   const videoRef = useRef(null);
   const hoverTimeout = useRef(null);
   const [menuData, setMenuData] = useState({ open: false, x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
   const [autoplay, setAutoplay] = useState(autoplayVideos);
+
+  const handleMouseDown = (e) => {
+    if (e.shiftKey) {
+      e.preventDefault();
+    }
+  };
+
+  const handleClick = (e) => {
+    if (e.shiftKey || hasSelection) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (onToggleSelect) {
+        onToggleSelect(data, index, e.shiftKey);
+      }
+    }
+  };
 
   useEffect(() => {
     const handler = (e) => setAutoplay(e.detail);
@@ -178,15 +194,21 @@ function Card({ data, index, onOpenLightbox }) {
 
   return (
     <div
-      className={`splatera-card ${isVideo ? 'is-video' : ''}`}
+      className={`splatera-card ${isVideo ? 'is-video' : ''} ${isSelected ? 'is-selected' : ''}`}
       style={{ aspectRatio: cardAspectRatio }}
       draggable
+      onMouseDown={handleMouseDown}
+      onClick={handleClick}
       onDragStart={handleDragStart}
       onContextMenu={handleContextMenu}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onDoubleClick={handleDoubleClick}
     >
+      {hasSelection && !isSelected && (
+        <div className="card-dim-overlay" />
+      )}
+
       {data.isBroken && (
         <div className="broken-overlay">
           <Unlink size={24} />
@@ -239,6 +261,8 @@ function Card({ data, index, onOpenLightbox }) {
           title={displayName}
           dateText={formatDate(data.created_at)}
           tags={data.tags ?? [ext]}
+          isSelected={isSelected}
+          onToggleSelect={(e) => onToggleSelect && onToggleSelect(data, index, e ? e.shiftKey : false)}
           onCopy={handleCopy}
           onMaximize={() => window.dispatchEvent(new CustomEvent('open-lightbox', { detail: data }))}
           onManageTags={() => window.dispatchEvent(new CustomEvent('open-tag-modal', { detail: data }))}

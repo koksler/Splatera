@@ -1,5 +1,6 @@
 import React from 'react';
-import { Package } from 'lucide-react';
+import { Package, X } from 'lucide-react';
+import Button from './button';
 import './AssetSquare.css';
 
 export default function AssetSquare({
@@ -8,6 +9,7 @@ export default function AssetSquare({
   isBlob = false,
   blobCount = 0,
   className = '',
+  onClose,
 }) {
   if (isBlob) {
     return (
@@ -20,6 +22,17 @@ export default function AssetSquare({
 
   return (
     <div className={`asset-square ${className}`}>
+      {onClose && (
+        <Button
+          variant="tiny"
+          icon={X}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          className="asset-square-close-btn"
+        />
+      )}
       {isVideo ? (
         <video
           src={src}
@@ -36,3 +49,4 @@ export default function AssetSquare({
     </div>
   );
 }
+

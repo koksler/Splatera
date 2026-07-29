@@ -1,0 +1,123 @@
+.help-dock-container {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  user-select: none;
+  pointer-events: auto;
+}
+
+/* Header Container (top/behind) */
+.help-dock-header {
+  position: relative;
+  z-index: 1;
+  height: 90px;
+  width: 430px;
+  box-sizing: border-box;
+  background-color: var(--color-border);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 5px 5px 30px 5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+}
+
+.help-dock-thumbnails {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 100%;
+}
+
+/* Custom Staged Vertical Scrollbar */
+.help-dock-scrollbar {
+  position: relative;
+  width: 20px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 5px;
+}
+
+.help-dock-scrollbar-stick {
+  position: absolute;
+  width: 2px;
+  height: 50px;
+  background-color: var(--color-text-secondary);
+  border-radius: 1px;
+}
+
+.help-dock-scrollbar-dots {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+}
+
+.help-dock-dot {
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--color-text-secondary);
+  border-radius: 50%;
+  cursor: pointer;
+  box-sizing: border-box;
+  outline: none;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.help-dock-dot.prev-dot,
+.help-dock-dot.next-dot {
+  width: 6px;
+  height: 6px;
+  background-color: var(--color-surface);
+}
+
+.help-dock-dot.current-dot {
+  width: 10px;
+  height: 10px;
+  background-color: var(--color-accent);
+  cursor: default;
+}
+
+.help-dock-footer {
+  position: relative;
+  z-index: 2;
+  margin-top: -25px;
+  height: 45px;
+  width: 430px;
+  box-sizing: border-box;
+  background-color: rgba(25, 25, 25, 0.75);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 5px 5px 5px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.help-dock-selected-text {
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-main);
+  white-space: nowrap;
+}
+
+.help-dock-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
