@@ -33,18 +33,16 @@
 
 .splatera-input::placeholder {
   color: var(--color-text-button);
-  opacity: 0.7;
 }
 
 /* Left-side icon */
 .input-icon {
   position: absolute;
-  left: 10px;
+  left: 12px;
   color: var(--color-text-button);
   pointer-events: none;
   width: 15px;
   height: 15px;
-  margin: 5px;
 }
 
 .search-right-container {
@@ -57,19 +55,6 @@
   z-index: 1;
 }
 
-.input-tag-color {
-  width: 24px;
-  height: 24px;
-  border-radius: 12px;
-  border: 1px solid var(--color-text-button);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.input-tag-color:hover {
-  border-color: var(--color-text-main);
-}
-
 /* +n tag button */
 .tag-more-button {
   display: flex;
@@ -80,7 +65,7 @@
   height: 25px;
   border-radius: 8px;
   background-color: var(--color-surface);
-  border: 1px solid var(--color-text-button);
+  border: 1px solid var(--color-border);
   color: var(--color-text-main);
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
@@ -108,7 +93,7 @@
   gap: 5px;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: thin;
+  scrollbar-width: thin; /* gonna need to change that */
   scrollbar-color: var(--color-border) transparent;
 }
 

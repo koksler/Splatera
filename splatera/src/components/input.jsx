@@ -28,11 +28,9 @@ const Input = React.forwardRef(({
   onPickerColorChange,
   ...props 
 }, ref) => {
-  const tagsRef = useRef(null);
   const inputRef = useRef(null);
   const wrapperRef = useRef(null);
 
-  const [dynamicPadding, setDynamicPadding] = useState(10);
   const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
 
@@ -80,23 +78,6 @@ const Input = React.forwardRef(({
   }, [selectedTags, isTagManagerOpen]);
 
   useEffect(() => {
-    const el = tagsRef.current;
-    if (!el) return;
-
-    const update = () => {
-      const w = el.offsetWidth;
-      // Positioned at right: 10px, so paddingRight needs to be container width + 15px
-      setDynamicPadding(w > 0 ? w + 15 : 10);
-    };
-
-    update();
-
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [selectedTags, selectedColors, showColorPicker]);
-
-  useEffect(() => {
     if (!hotkey) return;
 
     const handleKeyDown = (e) => {
@@ -126,13 +107,12 @@ const Input = React.forwardRef(({
         ref={inputRef}
         className="splatera-input" 
         style={{ 
-          paddingLeft: Icon ? '20px' : '10px', 
-          paddingRight: '20px' 
+          paddingLeft: Icon ? '15px' : '10px', 
         }} 
         {...props} 
       />
 
-      <div className="search-right-container" ref={tagsRef}>
+      <div className="search-right-container">
         {/* Selected Color Search Swatch (no more than 1) */}
         {selectedColors.slice(0, 1).map((color, idx) => (
           <div 
@@ -145,7 +125,7 @@ const Input = React.forwardRef(({
         ))}
 
         {/* Selected tags in the input field (at most 2) */}
-        {selectedTags.slice(0, 2).map((tag, idx) => (
+        {selectedTags.slice(0, 1).map((tag, idx) => (
           <Tag 
             key={`tag-${idx}`} 
             tag={tag} 
@@ -155,13 +135,13 @@ const Input = React.forwardRef(({
         ))}
 
         {/* If more than 2 tags are selected, show the +n button */}
-        {selectedTags.length > 2 && (
+        {selectedTags.length > 1 && (
           <button 
             type="button"
             className="tag-more-button"
             onClick={() => setIsTagManagerOpen(!isTagManagerOpen)}
           >
-            +{selectedTags.length - 2}
+            +{selectedTags.length - 1}
           </button>
         )}
 
