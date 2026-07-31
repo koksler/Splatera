@@ -15,6 +15,7 @@ import TagManager from './components/tagManager';
 import ImportModal from './components/importModal';
 import ErrorBoundary from './components/errorBoundary';
 import HelpDock from './components/HelpDock';
+import ScrollOverlay from './components/scrollOverlay';
 
 
 const SKELETON_ITEMS = Array.from({ length: 12 }).map((_, i) => ({
@@ -716,6 +717,7 @@ function App() {
         onBatchTag={handleBatchTag}
         onBatchDelete={handleBatchDelete}
       />
+      <ScrollOverlay />
     </div>
   );
 
