@@ -7,7 +7,7 @@
   border-radius: 8px;
   padding: 5px;
   background-color: var(--color-surface);
-  border: 1px solid var(--color-text-button);
+  border: 1px solid var(--color-border);
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   color: var(--color-text-main);
