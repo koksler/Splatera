@@ -9,3 +9,6 @@ splatera/src-tauri/target/
 splatera/node_modules/
 /splatera/src-tauri/.splatera_library
 /splatera/.agents
+*.blend
+*.blend1
+Problems.md
