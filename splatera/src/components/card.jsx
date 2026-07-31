@@ -11,10 +11,6 @@ import './card.css';
 let autoplayVideos = false;
 window.addEventListener('set-autoplay-videos', (e) => {
   autoplayVideos = e.detail;
-  document.querySelectorAll('.card-video').forEach(v => {
-    if (autoplayVideos) v.play().catch(() => { });
-    else { v.pause(); v.currentTime = 0; }
-  });
 });
 
 const getLanguage = (ext) => {
@@ -267,14 +263,16 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
           onMaximize={() => window.dispatchEvent(new CustomEvent('open-lightbox', { detail: data }))}
           onManageTags={() => window.dispatchEvent(new CustomEvent('open-tag-modal', { detail: data }))}
         />
-        <ContextMenu
-          isOpen={menuData.open}
-          setIsOpen={(val) => setMenuData(prev => ({ ...prev, open: val }))}
-          x={menuData.x}
-          y={menuData.y}
-          onAction={handleAction}
-          kind={data.kind}
-        />
+        {menuData.open && (
+          <ContextMenu
+            isOpen={menuData.open}
+            setIsOpen={(val) => setMenuData(prev => ({ ...prev, open: val }))}
+            x={menuData.x}
+            y={menuData.y}
+            onAction={handleAction}
+            kind={data.kind}
+          />
+        )}
       </div>
     </div>
   );
