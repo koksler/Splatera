@@ -101,8 +101,8 @@ export default memo(function Header({
 
         {/* Left Section */}
         <div className="header-left-part" data-tauri-drag-region>
-          <div className="header-logo">
-            <Logo size={36} />
+          <div className="header-logo" data-tauri-drag-region>
+            <Logo size={36} data-tauri-drag-region />
           </div>
           <div className="settings-menu-container">
             <SettingsMenu
@@ -130,7 +130,7 @@ export default memo(function Header({
             <Input
               icon={FolderSearch}
               type="text"
-              placeholder="Ponder your stuff here..."
+              placeholder="Ponder assets"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleKeyDown}

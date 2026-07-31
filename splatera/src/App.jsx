@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredVa
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { MasonryScroller, usePositioner } from 'masonic';
 
 import './App.css';
@@ -527,6 +526,7 @@ function App() {
       unlistenDragEnter.then(u => u());
       unlistenDragLeave.then(u => u());
       unlistenDrop.then(u => u());
+      if (notifTimeout.current) clearTimeout(notifTimeout.current);
     };
   }, []);
 
@@ -836,22 +836,11 @@ const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore, 
     const handleResize = () => setViewportHeight(window.innerHeight);
     window.addEventListener('resize', handleResize, { passive: true });
 
-    let debounceTimer = null;
-    let unlistenResize = null;
-    getCurrentWindow().onResized(() => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        invoke('recalculate_db').catch(err => console.error('recalculate_db failed:', err));
-      }, 500);
-    }).then(u => { unlistenResize = u; }).catch(() => { });
-
     return () => {
       observer.disconnect();
       window.removeEventListener('resize', handleResize);
       if (rafId) cancelAnimationFrame(rafId);
-      if (debounceTimer) clearTimeout(debounceTimer);
       if (resizeTimer.current) clearTimeout(resizeTimer.current);
-      unlistenResize?.();
     };
   }, []);
 
