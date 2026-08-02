@@ -91,6 +91,9 @@ function App() {
   const [viewMode, setViewMode] = useState('grid');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [snapHeader, setSnapHeader] = useState(false);
+  const [themeMode, setThemeMode] = useState('System');
+  const [rangeVal, setRangeVal] = useState(60);
+  const [autoplay, setAutoplay] = useState(false);
   const [tagPreviews, setTagPreviews] = useState([]);
   const settingsRef = useRef({});
 
@@ -466,6 +469,19 @@ function App() {
           if (settings.snapHeader !== undefined) {
             setSnapHeader(settings.snapHeader);
           }
+          if (settings.themeMode !== undefined) {
+            setThemeMode(settings.themeMode);
+          }
+          if (settings.rangeVal !== undefined) {
+            setRangeVal(settings.rangeVal);
+          }
+          if (settings.autoplay !== undefined) {
+            setAutoplay(settings.autoplay);
+            window.dispatchEvent(new CustomEvent('set-autoplay-videos', { detail: settings.autoplay }));
+          }
+          if (settings.viewMode !== undefined) {
+            setViewMode(settings.viewMode);
+          }
         } catch (e) {
           console.error("Failed to parse settings.json", e);
         }
@@ -549,6 +565,42 @@ function App() {
   }, [snapHeader]);
 
   useEffect(() => {
+    const applyTheme = (mode) => {
+      let activeMode = mode;
+      if (mode === 'System') {
+        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        activeMode = systemPrefersDark ? 'Dark' : 'Light';
+      }
+
+      if (activeMode === 'Light') {
+        document.body.classList.add('theme-light');
+        document.body.classList.remove('theme-dark');
+      } else {
+        document.body.classList.add('theme-dark');
+        document.body.classList.remove('theme-light');
+      }
+    };
+
+    applyTheme(themeMode);
+
+    if (themeMode === 'System') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handler = (e) => {
+        const activeMode = e.matches ? 'Dark' : 'Light';
+        if (activeMode === 'Light') {
+          document.body.classList.add('theme-light');
+          document.body.classList.remove('theme-dark');
+        } else {
+          document.body.classList.add('theme-dark');
+          document.body.classList.remove('theme-light');
+        }
+      };
+      mediaQuery.addEventListener('change', handler);
+      return () => mediaQuery.removeEventListener('change', handler);
+    }
+  }, [themeMode]);
+
+  useEffect(() => {
     let scrollTimeout;
     const container = document.querySelector('.app-container');
     const handleScroll = () => {
@@ -600,15 +652,40 @@ function App() {
     }
   };
 
-  const handleToggleSnapHeader = async (nextValue) => {
-    setSnapHeader(nextValue);
-    const updatedSettings = { ...settingsRef.current, snapHeader: nextValue };
+  const saveAppSetting = async (key, value) => {
+    const updatedSettings = { ...settingsRef.current, [key]: value };
     settingsRef.current = updatedSettings;
     try {
       await invoke('save_settings', { settings: JSON.stringify(updatedSettings) });
     } catch (err) {
       console.error("Failed to save settings", err);
     }
+  };
+
+  const handleToggleSnapHeader = (nextValue) => {
+    setSnapHeader(nextValue);
+    saveAppSetting('snapHeader', nextValue);
+  };
+
+  const handleThemeModeChange = (nextValue) => {
+    setThemeMode(nextValue);
+    saveAppSetting('themeMode', nextValue);
+  };
+
+  const handleRangeValChange = (nextValue) => {
+    setRangeVal(nextValue);
+    saveAppSetting('rangeVal', nextValue);
+  };
+
+  const handleAutoplayChange = (nextValue) => {
+    setAutoplay(nextValue);
+    window.dispatchEvent(new CustomEvent('set-autoplay-videos', { detail: nextValue }));
+    saveAppSetting('autoplay', nextValue);
+  };
+
+  const handleViewModeChange = (nextValue) => {
+    setViewMode(nextValue);
+    saveAppSetting('viewMode', nextValue);
   };
 
   const isSearchActive = searchQuery.trim() !== '' ||
@@ -643,9 +720,15 @@ function App() {
         dateFilter={dateFilter}
         setDateFilter={setDateFilter}
         viewMode={viewMode}
-        setViewMode={setViewMode}
+        setViewMode={handleViewModeChange}
         snapHeader={snapHeader}
         onSnapHeaderChange={handleToggleSnapHeader}
+        themeMode={themeMode}
+        onThemeModeChange={handleThemeModeChange}
+        rangeVal={rangeVal}
+        onRangeValChange={handleRangeValChange}
+        autoplay={autoplay}
+        onAutoplayChange={handleAutoplayChange}
       />
 
       <Notification
@@ -669,7 +752,7 @@ function App() {
       <div className="content-container">
         {initialLoading ? (
           <ErrorBoundary resetDeps={initialLoading} fallback={null}>
-            <LibraryGrid items={SKELETON_ITEMS} viewMode={viewMode} />
+            <LibraryGrid items={SKELETON_ITEMS} viewMode={viewMode} rangeVal={rangeVal} />
           </ErrorBoundary>
         ) : deferredImages.length === 0 ? (
           <div className="empty-state">
@@ -688,6 +771,7 @@ function App() {
             onOpenLightbox={openLightbox}
             selectedAssetIds={selectedAssetIds}
             onToggleSelect={toggleSelectAsset}
+            rangeVal={rangeVal}
           />
         )}
       </div>
@@ -813,7 +897,7 @@ const useJustifiedPositioner = ({ width, items = [], gutter = 15, targetHeight =
 
 // ─── LibraryGrid ─────────────────────────────────────────────────────────────
 
-const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore, onOpenLightbox, selectedAssetIds, onToggleSelect }) => {
+const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore, onOpenLightbox, selectedAssetIds, onToggleSelect, rangeVal }) => {
   const containerRef = useRef(null);
   const resizeTimer = useRef(null);
   const loaderRef = useRef(null);
@@ -864,7 +948,7 @@ const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore, 
     };
   }, []);
 
-  const minColumnWidth = 320;
+  const minColumnWidth = 150 + (rangeVal / 100) * 350;
   const standardGutter = 20;
   const numColumns = Math.max(1, Math.floor((containerWidth + standardGutter) / (minColumnWidth + standardGutter)));
 

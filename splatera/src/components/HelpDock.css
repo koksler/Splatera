@@ -96,7 +96,7 @@
   height: 45px;
   width: 430px;
   box-sizing: border-box;
-  background-color: rgba(25, 25, 25, 0.75);
+  background-color: var(--color-blur-bg);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
   border: 1px solid var(--color-border);

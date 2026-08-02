@@ -20,19 +20,16 @@ export default function SettingsMenu({
   setViewMode,
   snapHeader,
   onSnapHeaderChange,
+  themeMode,
+  onThemeModeChange,
+  rangeVal,
+  onRangeValChange,
+  autoplay,
+  onAutoplayChange,
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [autoplay, setAutoplay] = useState(false);
-  const [testOption, setTestOption] = useState('a');
   const [activeCategory, setActiveCategory] = useState('appearance');
   const [searchVal, setSearchVal] = useState('');
-
-  // State for new test components
-  const [textInputVal, setTextInputVal] = useState('');
-  const [sampleTags, setSampleTags] = useState(['PNG', 'explicit', 'CoolTag', 'Other cool tag', 'Bruh', 'Etc', 'Pictures']);
-  const [propertySelectVal, setPropertySelectVal] = useState('Light');
-  const [segmentedVal, setSegmentedVal] = useState('Light');
-  const [rangeVal, setRangeVal] = useState(60);
 
   useEffect(() => {
     if (isOpen) {
@@ -72,9 +69,7 @@ export default function SettingsMenu({
   };
 
   const handleToggleAutoplay = () => {
-    const next = !autoplay;
-    setAutoplay(next);
-    window.dispatchEvent(new CustomEvent('set-autoplay-videos', { detail: next }));
+    onAutoplayChange(!autoplay);
   };
 
   const handleClearLibrary = async () => {
@@ -90,60 +85,6 @@ export default function SettingsMenu({
     }
   };
 
-  const handleTestOngoingNotif = () => {
-    let currentProgress = 0;
-    window.dispatchEvent(new CustomEvent('show-notification', {
-      detail: {
-        title: 'Exporting Assets...',
-        desc: 'Exporting files to disk...',
-        progress: 0,
-        duration: 4000
-      }
-    }));
-    const interval = setInterval(() => {
-      currentProgress += 20;
-      if (currentProgress > 100) {
-        clearInterval(interval);
-        window.dispatchEvent(new CustomEvent('show-notification', {
-          detail: {
-            title: 'Process Complete',
-            desc: 'Successfully exported all files.'
-          }
-        }));
-      } else {
-        window.dispatchEvent(new CustomEvent('show-notification', {
-          detail: {
-            title: 'Exporting Assets...',
-            desc: `Exporting ${currentProgress}% of files to disk`,
-            progress: currentProgress,
-            duration: 4000
-          }
-        }));
-      }
-    }, 400);
-  };
-
-  const handleTestInstantNotif = () => {
-    window.dispatchEvent(new CustomEvent('show-notification', {
-      detail: {
-        title: 'Image Copied',
-        desc: 'Asset ready to paste into canvas.'
-      }
-    }));
-  };
-
-  const handleTestAbortableNotif = () => {
-    window.dispatchEvent(new CustomEvent('show-notification', {
-      detail: {
-        title: 'Asset Removed',
-        desc: '"wallpaper_render.png" deleted. Undo?',
-        progress: 40,
-        undoId: 'test-undo',
-        duration: 5000
-      }
-    }));
-  };
-
   const allSettings = [
     {
       category: 'appearance',
@@ -153,8 +94,8 @@ export default function SettingsMenu({
       control: (
         <SegmentedControl
           options={['Light', 'Dark', 'System']}
-          value={segmentedVal}
-          onChange={setSegmentedVal}
+          value={themeMode}
+          onChange={onThemeModeChange}
         />
       )
     },
@@ -194,7 +135,7 @@ export default function SettingsMenu({
           max={100}
           steps={7}
           value={rangeVal}
-          onChange={setRangeVal}
+          onChange={onRangeValChange}
         />
       )
     },
@@ -235,102 +176,6 @@ export default function SettingsMenu({
           text="Remove all files"
           onClick={handleClearLibrary}
           className="settings-action-btn settings-danger-btn"
-        />
-      )
-    },
-    {
-      category: 'data and storage',
-      group: 'test notifications',
-      title: 'Test Ongoing Process',
-      description: 'Simulate a long running export process',
-      control: (
-        <Button
-          text="Test Ongoing Process"
-          onClick={handleTestOngoingNotif}
-          className="settings-action-btn"
-        />
-      )
-    },
-    {
-      category: 'data and storage',
-      group: 'test notifications',
-      title: 'Test Instant Notification',
-      description: 'Trigger an instant action notification',
-      control: (
-        <Button
-          text="Test Instant Process"
-          onClick={handleTestInstantNotif}
-          className="settings-action-btn"
-        />
-      )
-    },
-    {
-      category: 'data and storage',
-      group: 'test notifications',
-      title: 'Test Abortable Notification',
-      description: 'Trigger a notification with an undo action',
-      control: (
-        <Button
-          text="Test Abortable Process"
-          onClick={handleTestAbortableNotif}
-          className="settings-action-btn"
-        />
-      )
-    },
-    {
-      category: 'data and storage',
-      group: 'test inputs',
-      title: 'Text Input',
-      description: 'Simple single-line text field component',
-      control: (
-        <TextField
-          placeholder="Type a tag name"
-          value={textInputVal}
-          onChange={(e) => setTextInputVal(e.target.value)}
-        />
-      )
-    },
-    {
-      category: 'data and storage',
-      group: 'test inputs',
-      title: 'Tag Input Wrapper',
-      description: 'Multi-tag container component',
-      control: (
-        <TextBox>
-          {sampleTags.map((labelName) => (
-            <Label
-              key={labelName}
-              text={labelName}
-              editable={true}
-              onRemove={() => setSampleTags((prev) => prev.filter((item) => item !== labelName))}
-            />
-          ))}
-        </TextBox>
-      )
-    },
-    {
-      category: 'data and storage',
-      group: 'test inputs',
-      title: 'Property Select',
-      description: 'Custom dropdown list selector',
-      control: (
-        <PropertySelect
-          options={['Light', 'Dark', 'System']}
-          value={propertySelectVal}
-          onChange={setPropertySelectVal}
-        />
-      )
-    },
-    {
-      category: 'data and storage',
-      group: 'test inputs',
-      title: 'Segmented Control',
-      description: 'Custom horizontal segmented control component',
-      control: (
-        <SegmentedControl
-          options={['Light', 'Dark', 'System']}
-          value={segmentedVal}
-          onChange={setSegmentedVal}
         />
       )
     }

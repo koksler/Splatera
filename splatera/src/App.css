@@ -52,8 +52,20 @@ body {
 
   --color-accent: #FFD16D;
   --color-red: #FF1515;
+  --color-blur-bg: rgba(34, 34, 34, 0.75);
 
   font-family: 'JetBrainsMono NFP', monospace;
+}
+
+body.theme-light {
+  --color-bg: #FFFFFF;
+  --color-surface: #D4D4D4;
+  --color-border: #B0B0B0;
+  --color-text-main: #1A1A1A;
+  --color-text-secondary: #707070;
+  --color-text-button: #404040;
+  --color-accent: #5E35B1;
+  --color-blur-bg: rgba(240, 240, 240, 0.75);
 }
 
 body {

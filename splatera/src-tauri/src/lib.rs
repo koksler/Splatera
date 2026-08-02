@@ -1100,9 +1100,17 @@ async fn clear_library(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn save_settings(state: State<'_, AppState>, settings: String) -> Result<(), String> {
+async fn save_settings(window: tauri::Window, state: State<'_, AppState>, settings: String) -> Result<(), String> {
     let settings_path = Path::new(&state.config.library_path).join("settings.json");
-    fs::write(settings_path, settings).map_err(|e| e.to_string())
+    let mut settings_json: serde_json::Value = serde_json::from_str(&settings).unwrap_or_else(|_| serde_json::json!({}));
+    if let (Ok(pos), Ok(size)) = (window.outer_position(), window.outer_size()) {
+        settings_json["windowX"] = serde_json::Value::from(pos.x);
+        settings_json["windowY"] = serde_json::Value::from(pos.y);
+        settings_json["windowWidth"] = serde_json::Value::from(size.width);
+        settings_json["windowHeight"] = serde_json::Value::from(size.height);
+    }
+    let updated_str = serde_json::to_string_pretty(&settings_json).map_err(|e| e.to_string())?;
+    fs::write(settings_path, updated_str).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1122,10 +1130,53 @@ pub fn run() {
             let db = init_db(&config)?;
             let clipboard = Clipboard::new().map_err(|e| e.to_string())?;
             app.manage(AppState {
-                config,
+                config: config.clone(),
                 db: Mutex::new(db),
                 clipboard: Mutex::new(clipboard),
             });
+
+            if let Some(main_window) = app.get_webview_window("main") {
+                let settings_path = std::path::Path::new(&config.library_path).join("settings.json");
+                if settings_path.exists() {
+                    if let Ok(settings_str) = std::fs::read_to_string(&settings_path) {
+                        if let Ok(settings_json) = serde_json::from_str::<serde_json::Value>(&settings_str) {
+                            if let (Some(x), Some(y)) = (settings_json.get("windowX").and_then(|v| v.as_f64()), settings_json.get("windowY").and_then(|v| v.as_f64())) {
+                                let _ = main_window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x as i32, y as i32)));
+                            }
+                            if let (Some(w), Some(h)) = (settings_json.get("windowWidth").and_then(|v| v.as_f64()), settings_json.get("windowHeight").and_then(|v| v.as_f64())) {
+                                let _ = main_window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(w as u32, h as u32)));
+                            }
+                        }
+                    }
+                }
+
+                let main_window_clone = main_window.clone();
+                let config_clone = config.clone();
+                main_window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { .. } = event {
+                        if let (Ok(pos), Ok(size)) = (main_window_clone.outer_position(), main_window_clone.outer_size()) {
+                            let settings_path = std::path::Path::new(&config_clone.library_path).join("settings.json");
+                            let mut settings_json = if settings_path.exists() {
+                                if let Ok(settings_str) = std::fs::read_to_string(&settings_path) {
+                                    serde_json::from_str::<serde_json::Value>(&settings_str).unwrap_or_else(|_| serde_json::json!({}))
+                                } else {
+                                    serde_json::json!({})
+                                }
+                            } else {
+                                serde_json::json!({})
+                            };
+                            settings_json["windowX"] = serde_json::Value::from(pos.x);
+                            settings_json["windowY"] = serde_json::Value::from(pos.y);
+                            settings_json["windowWidth"] = serde_json::Value::from(size.width);
+                            settings_json["windowHeight"] = serde_json::Value::from(size.height);
+                            if let Ok(updated_str) = serde_json::to_string_pretty(&settings_json) {
+                                let _ = std::fs::write(&settings_path, updated_str);
+                            }
+                        }
+                    }
+                });
+            }
+
             Ok(())
         })
         .plugin(tauri_plugin_drag::init())

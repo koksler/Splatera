@@ -29,6 +29,12 @@ export default memo(function Header({
   setViewMode,
   snapHeader,
   onSnapHeaderChange,
+  themeMode,
+  onThemeModeChange,
+  rangeVal,
+  onRangeValChange,
+  autoplay,
+  onAutoplayChange,
 }) {
   const headerRef = useRef(null);
   const appWindowRef = useRef(null);
@@ -110,6 +116,12 @@ export default memo(function Header({
               setViewMode={setViewMode}
               snapHeader={snapHeader}
               onSnapHeaderChange={onSnapHeaderChange}
+              themeMode={themeMode}
+              onThemeModeChange={onThemeModeChange}
+              rangeVal={rangeVal}
+              onRangeValChange={onRangeValChange}
+              autoplay={autoplay}
+              onAutoplayChange={onAutoplayChange}
             />
           </div>
           <div className="import-btn-container">
