@@ -89,19 +89,26 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
   const clampedAspect = Math.min(Math.max(rawAspect, 0.5), 2.2);
   const cardAspectRatio = `${clampedAspect}`;
 
-  const handleMouseEnter = () => {
-    setIsHovered(true);
-    const isScrolling = document.querySelector('.app-container')?.classList.contains('is-scrolling');
-    if (isScrolling && !autoplayVideos) return;
+  const [isGifHovered, setIsGifHovered] = useState(false);
 
+  const handleMouseEnter = () => {
+    const isScrolling = document.querySelector('.app-container')?.classList.contains('is-scrolling');
+    if (isScrolling) return;
+
+    setIsHovered(true);
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
     hoverTimeout.current = setTimeout(() => {
-      videoRef.current?.play().catch(() => { });
+      if (isGif) {
+        setIsGifHovered(true);
+      } else {
+        videoRef.current?.play().catch(() => { });
+      }
     }, 200);
   };
 
   const handleMouseLeave = () => {
     setIsHovered(false);
+    setIsGifHovered(false);
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
     if (videoRef.current && !autoplay) {
       videoRef.current.pause();
@@ -188,6 +195,8 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
     }
   };
 
+  const PLACEHOLDER_IMG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'><rect width='1' height='1' fill='%23222222'/></svg>";
+
   return (
     <div
       className={`splatera-card ${isVideo ? 'is-video' : ''} ${isSelected ? 'is-selected' : ''}`}
@@ -237,13 +246,14 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
           muted
           loop
           playsInline
+          preload="none"
           className="card-video"
           poster={data.preview || undefined}
         />
       ) : (
         <div className="img-container" style={{ background: '#222', width: '100%', height: '100%', contain: 'layout paint' }}>
           <img
-            src={(isGif && isHovered) || (isAnimatable && autoplay) ? convertFileSrc(data.path) : (data.preview || convertFileSrc(data.path))}
+            src={(isGif && isGifHovered) || (isAnimatable && autoplay) ? convertFileSrc(data.path) : (data.preview || PLACEHOLDER_IMG)}
             alt={data.name}
             loading="lazy"
             decoding="async"

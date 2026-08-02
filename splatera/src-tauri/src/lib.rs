@@ -1,8 +1,8 @@
 mod processing;
 use crate::processing::{
-    Asset, AssetKind, FileMetadata, SimplifiedAsset, ALL_EXTENSIONS,
+    Asset, AssetKind, FileMetadata, SimplifiedAsset,
     color_distance, compute_file_hash, extract_colors, extract_metadata, generate_video_thumbnail,
-    get_video_dimensions, hex_to_rgb, process_single_path, save_thumbnail,
+    get_video_dimensions, hex_to_rgb, save_thumbnail,
 };
 
 use arboard::Clipboard;
@@ -13,7 +13,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, State};
+use tauri::{Manager, State};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -344,6 +344,197 @@ fn get_top_tags(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let mut sorted: Vec<(String, usize)> = counts.into_iter().collect();
     sorted.sort_by(|a, b| b.1.cmp(&a.1));
     Ok(sorted.into_iter().map(|(tag, _)| tag).collect())
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct TagPreview {
+    tag: String,
+    count: usize,
+    preview_path: Option<String>,
+}
+
+#[tauri::command]
+fn get_tag_previews(state: State<'_, AppState>) -> Result<Vec<TagPreview>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT tags, preview_path, original_path FROM assets ORDER BY created_at DESC")
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt.query(()).map_err(|e| e.to_string())?;
+
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    let mut previews: HashMap<String, Vec<String>> = HashMap::new();
+
+    while let Some(row) = rows.next().map_err(|e| e.to_string())? {
+        let tags_json: String = row.get(0).unwrap_or("[]".to_string());
+        let preview_path: Option<String> = row.get(1).ok();
+        let original_path: Option<String> = row.get(2).ok();
+        let best_path = preview_path.or(original_path);
+
+        let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+        for tag in tags {
+            let upper = tag.to_uppercase();
+            *counts.entry(upper.clone()).or_insert(0) += 1;
+            if let Some(ref p) = best_path {
+                previews.entry(upper).or_default().push(p.clone());
+            }
+        }
+    }
+
+    let mut sorted: Vec<TagPreview> = counts
+        .into_iter()
+        .map(|(tag, count)| {
+            let paths = previews.get(&tag);
+            let preview_path = paths.and_then(|v| {
+                if v.is_empty() {
+                    None
+                } else {
+                    // Seed a simple LCG pseudo-random generator with a hash of tag + count + length
+                    let mut seed = count as u64;
+                    for c in tag.chars() {
+                        seed = seed.wrapping_add(c as u64).wrapping_mul(31);
+                    }
+                    let rand_val = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                    let idx = (rand_val % v.len() as u64) as usize;
+                    Some(v[idx].clone())
+                }
+            });
+            TagPreview {
+                preview_path,
+                tag,
+                count,
+            }
+        })
+        .collect();
+    sorted.sort_by(|a, b| b.count.cmp(&a.count));
+    Ok(sorted)
+}
+
+#[tauri::command]
+fn get_asset_count_for_tag(state: State<'_, AppState>, tag: String) -> Result<usize, String> {
+    let tag_upper = tag.to_uppercase();
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT tags FROM assets")
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt.query(()).map_err(|e| e.to_string())?;
+    
+    let mut count = 0;
+    while let Some(row) = rows.next().map_err(|e| e.to_string())? {
+        let tags_json: String = row.get(0).unwrap_or_else(|_| "[]".to_string());
+        let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+        if tags.iter().any(|t| t.to_uppercase() == tag_upper) {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+#[tauri::command]
+fn delete_tag_globally(state: State<'_, AppState>, tag: String) -> Result<(), String> {
+    let tag_upper = tag.to_uppercase();
+    let mut conn = state.db.lock().map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    
+    let mut stmt = tx
+        .prepare("SELECT id, tags FROM assets")
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt.query(()).map_err(|e| e.to_string())?;
+
+    let mut to_update = Vec::new();
+    while let Some(row) = rows.next().map_err(|e| e.to_string())? {
+        let id: String = row.get(0).map_err(|e| e.to_string())?;
+        let tags_json: String = row.get(1).unwrap_or_else(|_| "[]".to_string());
+        let mut tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+        
+        let old_len = tags.len();
+        tags.retain(|t| t.to_uppercase() != tag_upper);
+        if tags.len() < old_len {
+            let new_json = serde_json::to_string(&tags).map_err(|e| e.to_string())?;
+            to_update.push((id, new_json));
+        }
+    }
+    drop(rows);
+    drop(stmt);
+
+    for (id, new_json) in to_update {
+        tx.execute(
+            "UPDATE assets SET tags = ?1 WHERE id = ?2",
+            params![new_json, id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_tag_and_assets(state: State<'_, AppState>, tag: String) -> Result<(), String> {
+    let tag_upper = tag.to_uppercase();
+    let mut conn = state.db.lock().map_err(|e| e.to_string())?;
+    
+    let mut stmt = conn
+        .prepare("SELECT id, tags FROM assets")
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt.query(()).map_err(|e| e.to_string())?;
+    
+    let mut ids_to_delete = Vec::new();
+    while let Some(row) = rows.next().map_err(|e| e.to_string())? {
+        let id: String = row.get(0).map_err(|e| e.to_string())?;
+        let tags_json: String = row.get(1).unwrap_or_else(|_| "[]".to_string());
+        let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+        if tags.iter().any(|t| t.to_uppercase() == tag_upper) {
+            ids_to_delete.push(id);
+        }
+    }
+    drop(rows);
+    drop(stmt);
+    
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    for id in ids_to_delete {
+        let asset_data = tx.query_row(
+            "SELECT id, original_path, preview_path, kind, dominant_colors, tags, size_bytes, file_name, extension, last_modified_os, width, height, created_at, content_snippet, is_broken, file_hash FROM assets WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(DeleteOperationData {
+                    id: row.get(0)?,
+                    original_path: row.get(1)?,
+                    preview_path: row.get(2)?,
+                    kind: row.get(3)?,
+                    dominant_colors: row.get(4)?,
+                    tags: row.get(5)?,
+                    size_bytes: row.get(6)?,
+                    file_name: row.get(7)?,
+                    extension: row.get(8)?,
+                    last_modified_os: row.get(9)?,
+                    width: row.get(10)?,
+                    height: row.get(11)?,
+                    created_at: row.get(12)?,
+                    content_snippet: row.get(13)?,
+                    is_broken: row.get(14)?,
+                    file_hash: row.get(15)?,
+                    deleted_from_device: false,
+                })
+            },
+        ).ok();
+        
+        if let Some(data) = asset_data {
+            let op_id = format!("op_{}", Uuid::new_v4());
+            let details_json = serde_json::to_string(&data).unwrap_or_default();
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let _ = tx.execute(
+                "INSERT INTO operation_log (id, op_type, timestamp, details_json) VALUES (?1, 'delete', ?2, ?3)",
+                params![op_id, timestamp, details_json],
+            );
+        }
+        
+        tx.execute("DELETE FROM assets WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -953,6 +1144,10 @@ pub fn run() {
             recalculate_db,
             recalculate_colors,
             get_top_tags,
+            get_tag_previews,
+            get_asset_count_for_tag,
+            delete_tag_globally,
+            delete_tag_and_assets,
             update_asset_tags,
             delete_asset,
             delete_asset_device,

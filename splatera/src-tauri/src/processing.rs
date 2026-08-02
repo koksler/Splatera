@@ -184,16 +184,23 @@ pub fn process_single_path(path: &Path, config: &AppConfig) -> Result<Asset, Str
     let mut preview_path = None;
     let mut dominant_colors = vec![];
     let mut content_snippet = None;
+    let mut is_broken = false;
     let mut width = 0u32;
     let mut height = 0u32;
 
     if IMAGE_EXTENSIONS.contains(&ext.as_str()) {
         kind = AssetKind::Image;
-        if let Ok(img) = image::open(path) {
-            width = img.width();
-            height = img.height();
-            dominant_colors = extract_colors(&img);
-            preview_path = save_thumbnail(&img, &asset_id, config);
+        match image::open(path) {
+            Ok(img) => {
+                width = img.width();
+                height = img.height();
+                dominant_colors = extract_colors(&img);
+                preview_path = save_thumbnail(&img, &asset_id, config);
+            }
+            Err(e) => {
+                eprintln!("Error decoding image {:?}: {}", path, e);
+                is_broken = true;
+            }
         }
     } else if VIDEO_EXTENSIONS.contains(&ext.as_str()) {
         kind = AssetKind::Video;
@@ -202,6 +209,9 @@ pub fn process_single_path(path: &Path, config: &AppConfig) -> Result<Asset, Str
         height = h;
 
         preview_path = generate_video_thumbnail(path, &asset_id, config);
+        if preview_path.is_none() {
+            is_broken = true;
+        }
     } else if TEXT_EXTENSIONS.contains(&ext.as_str()) {
         kind = AssetKind::Text;
         content_snippet = read_text_snippet(path);
@@ -235,7 +245,7 @@ pub fn process_single_path(path: &Path, config: &AppConfig) -> Result<Asset, Str
             .unwrap_or_default()
             .as_secs(),
         content_snippet,
-        is_broken: false,
+        is_broken,
         file_hash,
     })
 }

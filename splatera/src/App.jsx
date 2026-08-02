@@ -16,6 +16,7 @@ import ImportModal from './components/importModal';
 import ErrorBoundary from './components/errorBoundary';
 import HelpDock from './components/HelpDock';
 import ScrollOverlay from './components/scrollOverlay';
+import TagCarousel from './components/TagCarousel';
 
 
 const SKELETON_ITEMS = Array.from({ length: 12 }).map((_, i) => ({
@@ -90,6 +91,7 @@ function App() {
   const [viewMode, setViewMode] = useState('grid');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [snapHeader, setSnapHeader] = useState(false);
+  const [tagPreviews, setTagPreviews] = useState([]);
   const settingsRef = useRef({});
 
   const [selectedAssetIds, setSelectedAssetIds] = useState(new Set());
@@ -322,6 +324,13 @@ function App() {
 
     return () => clearTimeout(timer);
   }, [activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder, refreshTrigger]);
+
+  // Load tag previews on mount and when library changes
+  useEffect(() => {
+    invoke('get_tag_previews')
+      .then(previews => setTagPreviews(previews))
+      .catch(err => console.error('Failed to load tag previews:', err));
+  }, [refreshTrigger]);
 
   const confirmRename = async (newName) => {
     if (newName && renameData) {
@@ -647,6 +656,15 @@ function App() {
         undoId={notif.undoId}
         onUndo={handleUndo}
       />
+
+      {!initialLoading && !searchQuery && selectedTags.length === 0 && !selectedColor && !dateFilter && !activeFilter && tagPreviews.length > 0 && (
+        <TagCarousel
+          tags={tagPreviews}
+          onTagClick={(tag) => {
+            setSelectedTags([tag]);
+          }}
+        />
+      )}
 
       <div className="content-container">
         {initialLoading ? (
