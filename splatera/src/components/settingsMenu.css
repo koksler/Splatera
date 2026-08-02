@@ -1,59 +1,215 @@
 .settings-menu-wrapper {
-    position: relative;
-  }
-  
-  .settings-popover {
-    z-index: 100;
-    
-    background-color: var(--color-bg);
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    padding: 16px;
-    
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    width: 220px;
-  }
-  
-  .settings-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    color: var(--color-text-button);
-    margin-bottom: 4px;
-  }
-  
-  /* Делаем кнопку внутри меню растянутой на всю ширину */
-  .settings-action-btn {
-    width: 100%;
-    justify-content: flex-start; /* Прижимаем иконку и текст влево */
-  }
+  position: relative;
+}
 
-  .settings-btn-active {
-    background-color: var(--color-accent) !important;
-    color: #000 !important;
-  }
+.settings-popover {
+  z-index: 100;
 
-  .settings-danger-btn {
-    border-color: #ff5555 !important;
-    color: #ff5555 !important;
-  }
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 16px;
 
-  .settings-danger-btn:hover {
-    border-color: #ff3333 !important;
-    background-color: rgba(255, 85, 85, 0.1) !important;
-  }
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 330px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
 
-  .settings-popover .splatera-toggle-wrapper {
-    width: 100%;
-    justify-content: space-between;
-    flex-direction: row-reverse; /* track on right, label on left */
-    box-sizing: border-box;
-    padding: 8px 12px;
-    min-height: 35px;
-    margin-bottom: 2px;
-  }
+.settings-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--color-text-button);
+  margin-bottom: 4px;
+}
 
-  .settings-popover .splatera-toggle-wrapper:hover:not(.disabled) {
-    opacity: 0.9;
-  }
+.settings-action-btn {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.settings-btn-active {
+  background-color: var(--color-accent) !important;
+  color: #000 !important;
+}
+
+.settings-danger-btn {
+  border-color: #ff5555 !important;
+  color: #ff5555 !important;
+}
+
+.settings-danger-btn:hover {
+  border-color: #ff3333 !important;
+  background-color: rgba(255, 85, 85, 0.1) !important;
+}
+
+.settings-popover .splatera-toggle-wrapper {
+  width: 100%;
+  justify-content: space-between;
+  flex-direction: row-reverse;
+  /* track on right, label on left */
+  box-sizing: border-box;
+  padding: 8px 12px;
+  min-height: 35px;
+  margin-bottom: 2px;
+}
+
+.settings-popover .splatera-toggle-wrapper:hover:not(.disabled) {
+  opacity: 0.9;
+}
+
+/* Modal overlay grid background (similar to importModal/confirmModal), but less dark*/
+.settings-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.settings-modal-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+
+  background-image:
+    linear-gradient(#1a1a1a 1px, transparent 1px),
+    linear-gradient(90deg, #1a1a1a 1px, transparent 1px);
+  background-size: 35px 35px;
+
+  -webkit-mask-image: linear-gradient(to top, black 0%, transparent 100%);
+  mask-image: linear-gradient(to top, black 0%, transparent 100%);
+}
+
+.settings-modal-content-wrapper {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1200;
+  max-width: 100%;
+}
+
+/* Left sidebar panel */
+.settings-sidebar {
+  width: 270px;
+  height: 570px;
+  padding: 20px;
+  gap: 10px;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  color: var(--color-text-main);
+}
+
+.settings-header-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.settings-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-main);
+  margin: 0;
+  text-align: left;
+  font-family: inherit;
+}
+
+.settings-subtitle {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin: 0;
+  text-align: left;
+  font-family: inherit;
+}
+
+.settings-search-box {
+  margin-top: 10px;
+}
+
+.settings-panel-divider {
+  height: 1px;
+  background-color: var(--color-border);
+  margin: 5px 0;
+  width: 100%;
+}
+
+.settings-categories-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  /* 30px gap between button categories is handled by divider margins + list margin */
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Right content panel */
+.settings-content {
+  width: 800px;
+  height: 570px;
+  padding: 20px;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  text-align: left;
+}
+
+.settings-category-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.settings-group-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-main);
+  margin: 0;
+  text-transform: lowercase;
+  text-align: left;
+  font-family: inherit;
+}
+
+.settings-category-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  width: 100%;
+  height: 100%;
+}
+
+body.settings-open {
+  overflow: hidden !important;
+}

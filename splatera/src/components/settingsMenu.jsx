@@ -1,21 +1,17 @@
-import { useState } from 'react';
-import { Settings, DatabaseZap, Play, Trash2, Copy } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Settings, DatabaseZap, Play, Trash2, Copy, CakeSlice, Rabbit, Package } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import {
-  useFloating,
-  autoUpdate,
-  offset,
-  flip,
-  shift,
-  useClick,
-  useDismiss,
-  useRole,
-  useInteractions,
-  FloatingFocusManager,
-} from '@floating-ui/react';
 import Button from './button';
 import Toggle from './toggle';
 import SelectButton from './selectButton';
+import TextField from './textField';
+import TextBox from './TextBox';
+import PropertySelect from './PropertySelect';
+import SegmentedControl from './SegmentedControl';
+import RangeSlider from './RangeSlider';
+import Label from './label';
+import { GrayBox, SettingRow } from './GrayBox';
 import './settingsMenu.css';
 
 export default function SettingsMenu({
@@ -28,48 +24,50 @@ export default function SettingsMenu({
   const [isOpen, setIsOpen] = useState(false);
   const [autoplay, setAutoplay] = useState(false);
   const [testOption, setTestOption] = useState('a');
+  const [activeCategory, setActiveCategory] = useState('appearance');
+  const [searchVal, setSearchVal] = useState('');
 
-  const { refs, floatingStyles, context } = useFloating({
-    open: isOpen,
-    onOpenChange: setIsOpen,
-    placement: 'bottom-end',
-    whileElementsMounted: autoUpdate,
-    middleware: [
-      offset(({ rects }) => {
-        const headerEl = document.querySelector('.splatera-header');
-        const buttonEl = refs.reference.current;
-        if (headerEl && buttonEl && headerEl.contains(buttonEl)) {
-          const headerRect = headerEl.getBoundingClientRect();
-          const buttonRect = buttonEl.getBoundingClientRect();
-          return (headerRect.bottom - buttonRect.bottom) + 10;
-        }
-        return 10;
-      }),
-      flip(),
-      shift({ padding: 10 }),
-    ],
-  });
+  // State for new test components
+  const [textInputVal, setTextInputVal] = useState('');
+  const [sampleTags, setSampleTags] = useState(['PNG', 'explicit', 'CoolTag', 'Other cool tag', 'Bruh', 'Etc', 'Pictures']);
+  const [propertySelectVal, setPropertySelectVal] = useState('Light');
+  const [segmentedVal, setSegmentedVal] = useState('Light');
+  const [rangeVal, setRangeVal] = useState(60);
 
-  const click = useClick(context);
-  const dismiss = useDismiss(context);
-  const role = useRole(context);
-
-  const { getReferenceProps, getFloatingProps } = useInteractions([
-    click,
-    dismiss,
-    role,
-  ]);
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('settings-open');
+    } else {
+      document.body.classList.remove('settings-open');
+    }
+    return () => {
+      document.body.classList.remove('settings-open');
+    };
+  }, [isOpen]);
 
   const handleRecalculate = async () => {
     try {
+      setIsOpen(false);
+      window.dispatchEvent(new CustomEvent('show-notification', {
+        detail: {
+          title: 'Optimizing Database...',
+          desc: 'Regenerating thumbnails and verifying file integrity...',
+          progress: 50,
+          duration: 60000
+        }
+      }));
+
       await invoke('recalculate_db');
+
       window.dispatchEvent(new CustomEvent('reload-library'));
       window.dispatchEvent(new CustomEvent('show-notification', {
         detail: { title: 'Database Optimized', desc: 'Library reloaded successfully.' }
       }));
-      setIsOpen(false);
     } catch (error) {
       console.error("Error on BD recalc:", error);
+      window.dispatchEvent(new CustomEvent('show-notification', {
+        detail: { title: 'Optimization Failed', desc: 'Could not optimize the database.' }
+      }));
     }
   };
 
@@ -92,92 +90,362 @@ export default function SettingsMenu({
     }
   };
 
+  const handleTestOngoingNotif = () => {
+    let currentProgress = 0;
+    window.dispatchEvent(new CustomEvent('show-notification', {
+      detail: {
+        title: 'Exporting Assets...',
+        desc: 'Exporting files to disk...',
+        progress: 0,
+        duration: 4000
+      }
+    }));
+    const interval = setInterval(() => {
+      currentProgress += 20;
+      if (currentProgress > 100) {
+        clearInterval(interval);
+        window.dispatchEvent(new CustomEvent('show-notification', {
+          detail: {
+            title: 'Process Complete',
+            desc: 'Successfully exported all files.'
+          }
+        }));
+      } else {
+        window.dispatchEvent(new CustomEvent('show-notification', {
+          detail: {
+            title: 'Exporting Assets...',
+            desc: `Exporting ${currentProgress}% of files to disk`,
+            progress: currentProgress,
+            duration: 4000
+          }
+        }));
+      }
+    }, 400);
+  };
+
+  const handleTestInstantNotif = () => {
+    window.dispatchEvent(new CustomEvent('show-notification', {
+      detail: {
+        title: 'Image Copied',
+        desc: 'Asset ready to paste into canvas.'
+      }
+    }));
+  };
+
+  const handleTestAbortableNotif = () => {
+    window.dispatchEvent(new CustomEvent('show-notification', {
+      detail: {
+        title: 'Asset Removed',
+        desc: '"wallpaper_render.png" deleted. Undo?',
+        progress: 40,
+        undoId: 'test-undo',
+        duration: 5000
+      }
+    }));
+  };
+
+  const allSettings = [
+    {
+      category: 'appearance',
+      group: 'general',
+      title: 'Your preferred color-scheme:',
+      description: 'General tone of colors, dark and light',
+      control: (
+        <SegmentedControl
+          options={['Light', 'Dark', 'System']}
+          value={segmentedVal}
+          onChange={setSegmentedVal}
+        />
+      )
+    },
+    {
+      category: 'appearance',
+      group: 'general',
+      title: 'Masonry layout',
+      description: 'Way your stuff is arranged',
+      control: (
+        <PropertySelect
+          options={['Vertical', 'Horizontal']}
+          value={viewMode === 'grid' ? 'Vertical' : 'Horizontal'}
+          onChange={(val) => setViewMode(val === 'Vertical' ? 'grid' : 'horizontal')}
+        />
+      )
+    },
+    {
+      category: 'appearance',
+      group: 'general',
+      title: 'Pill header style',
+      description: 'If you like more floaty design, keep it on',
+      control: (
+        <Toggle
+          checked={snapHeader}
+          onChange={onSnapHeaderChange}
+        />
+      )
+    },
+    {
+      category: 'appearance',
+      group: 'spacing',
+      title: 'Assets zoom in',
+      description: 'Lower value = More images squeezed in',
+      control: (
+        <RangeSlider
+          min={0}
+          max={100}
+          steps={7}
+          value={rangeVal}
+          onChange={setRangeVal}
+        />
+      )
+    },
+    {
+      category: 'appearance',
+      group: 'experimental',
+      title: 'Autoplay all media',
+      description: 'It loops all gifs and videos forever. VERY RESOURCE INTENSIVE. And I mean it.',
+      control: (
+        <Toggle
+          checked={autoplay}
+          onChange={handleToggleAutoplay}
+        />
+      )
+    },
+    {
+      category: 'data and storage',
+      group: 'database tools',
+      title: 'Recalculate DB',
+      description: 'Optimize database layout, regenerate thumbnails, and verify integrity',
+      control: (
+        <Button
+          icon={DatabaseZap}
+          text="Recalculate DB"
+          onClick={handleRecalculate}
+          className="settings-action-btn"
+        />
+      )
+    },
+    {
+      category: 'data and storage',
+      group: 'database tools',
+      title: 'Clear Library',
+      description: 'Remove all files from the database (does not delete local disk files)',
+      control: (
+        <Button
+          icon={Trash2}
+          text="Remove all files"
+          onClick={handleClearLibrary}
+          className="settings-action-btn settings-danger-btn"
+        />
+      )
+    },
+    {
+      category: 'data and storage',
+      group: 'test notifications',
+      title: 'Test Ongoing Process',
+      description: 'Simulate a long running export process',
+      control: (
+        <Button
+          text="Test Ongoing Process"
+          onClick={handleTestOngoingNotif}
+          className="settings-action-btn"
+        />
+      )
+    },
+    {
+      category: 'data and storage',
+      group: 'test notifications',
+      title: 'Test Instant Notification',
+      description: 'Trigger an instant action notification',
+      control: (
+        <Button
+          text="Test Instant Process"
+          onClick={handleTestInstantNotif}
+          className="settings-action-btn"
+        />
+      )
+    },
+    {
+      category: 'data and storage',
+      group: 'test notifications',
+      title: 'Test Abortable Notification',
+      description: 'Trigger a notification with an undo action',
+      control: (
+        <Button
+          text="Test Abortable Process"
+          onClick={handleTestAbortableNotif}
+          className="settings-action-btn"
+        />
+      )
+    },
+    {
+      category: 'data and storage',
+      group: 'test inputs',
+      title: 'Text Input',
+      description: 'Simple single-line text field component',
+      control: (
+        <TextField
+          placeholder="Type a tag name"
+          value={textInputVal}
+          onChange={(e) => setTextInputVal(e.target.value)}
+        />
+      )
+    },
+    {
+      category: 'data and storage',
+      group: 'test inputs',
+      title: 'Tag Input Wrapper',
+      description: 'Multi-tag container component',
+      control: (
+        <TextBox>
+          {sampleTags.map((labelName) => (
+            <Label
+              key={labelName}
+              text={labelName}
+              editable={true}
+              onRemove={() => setSampleTags((prev) => prev.filter((item) => item !== labelName))}
+            />
+          ))}
+        </TextBox>
+      )
+    },
+    {
+      category: 'data and storage',
+      group: 'test inputs',
+      title: 'Property Select',
+      description: 'Custom dropdown list selector',
+      control: (
+        <PropertySelect
+          options={['Light', 'Dark', 'System']}
+          value={propertySelectVal}
+          onChange={setPropertySelectVal}
+        />
+      )
+    },
+    {
+      category: 'data and storage',
+      group: 'test inputs',
+      title: 'Segmented Control',
+      description: 'Custom horizontal segmented control component',
+      control: (
+        <SegmentedControl
+          options={['Light', 'Dark', 'System']}
+          value={segmentedVal}
+          onChange={setSegmentedVal}
+        />
+      )
+    }
+  ];
+
+  const groupBy = (array, key) => {
+    return array.reduce((result, currentValue) => {
+      (result[currentValue[key]] = result[currentValue[key]] || []).push(currentValue);
+      return result;
+    }, {});
+  };
+
+  const isSearchActive = searchVal.trim().length > 0;
+  
+  let groupedSections = {};
+  if (isSearchActive) {
+    const query = searchVal.toLowerCase();
+    const filtered = allSettings.filter(item => 
+      item.title.toLowerCase().includes(query) || 
+      item.description.toLowerCase().includes(query)
+    );
+    groupedSections = groupBy(filtered, 'category');
+  } else {
+    const filtered = allSettings.filter(item => item.category === activeCategory);
+    groupedSections = groupBy(filtered, 'group');
+  }
+
   return (
     <>
-      <div ref={refs.setReference} {...getReferenceProps()} style={{ display: 'flex' }}>
+      <div onClick={() => setIsOpen(true)} style={{ display: 'flex' }}>
         <Button icon={Settings} className="control-btn" tooltip="Settings" tooltipPosition="bottom" />
       </div>
 
-      {isOpen && (
-        <FloatingFocusManager context={context} modal={false}>
-          <div
-            ref={refs.setFloating}
-            style={floatingStyles}
-            {...getFloatingProps()}
-            className="settings-popover"
-          >
-            <div className="settings-label">App Settings</div>
+      {isOpen && createPortal(
+        <div className="settings-modal-overlay" onClick={() => setIsOpen(false)}>
+          <div className="settings-modal-content-wrapper" onClick={(e) => e.stopPropagation()}>
+            
+            {/* Left categories sidebar */}
+            <div className="settings-sidebar">
+              <div className="settings-header-group">
+                <h2 className="settings-title">Settings</h2>
+                <span className="settings-subtitle">v1.0.0-stable</span>
+              </div>
 
-            <Toggle
-              label="Snap header"
-              checked={snapHeader}
-              onChange={onSnapHeaderChange}
-            />
-
-            <Button
-              icon={DatabaseZap}
-              text="Recalculate DB"
-              onClick={handleRecalculate}
-              className="settings-action-btn"
-            />
-
-            <Button
-              text={viewMode === 'grid' ? "Switch to Horizontal View" : "Switch to Vertical View"}
-              onClick={() => {
-                setViewMode(viewMode === 'grid' ? 'horizontal' : 'grid');
-                handleRecalculate();
-                setIsOpen(false);
-              }}
-              className="settings-action-btn"
-            />
-
-            <Button
-              icon={Play}
-              text="Autoplay all videos"
-              onClick={handleToggleAutoplay}
-              className={`settings-action-btn${autoplay ? ' settings-btn-active' : ''}`}
-            />
-
-            <Button
-              icon={Trash2}
-              text="Remove all files from lib"
-              onClick={handleClearLibrary}
-              className="settings-action-btn settings-danger-btn"
-            />
-
-            <div className="settings-label" style={{ marginTop: '8px' }}>Test SelectButtons</div>
-            <SelectButton
-              icon={Copy}
-              text="Option A"
-              active={testOption === 'a'}
-              onClick={() => setTestOption('a')}
-              color="#5C2FFF"
-            />
-            <SelectButton
-              icon={Copy}
-              text="Option B"
-              active={testOption === 'b'}
-              onClick={() => setTestOption('b')}
-              color="#FF5C2F"
-            />
-            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-              <SelectButton
-                icon={Copy}
-                minimized
-                active={testOption === 'a'}
-                onClick={() => setTestOption('a')}
-                color="#5C2FFF"
+              <TextField
+                className="settings-search-box"
+                placeholder="Search"
+                value={searchVal}
+                onChange={(e) => setSearchVal(e.target.value)}
               />
-              <SelectButton
-                icon={Copy}
-                minimized
-                active={testOption === 'b'}
-                onClick={() => setTestOption('b')}
-                color="#FF5C2F"
-              />
+
+              <div className="settings-panel-divider" />
+
+              <div className="settings-categories-list">
+                <SelectButton
+                  icon={CakeSlice}
+                  text="appearance"
+                  active={activeCategory === 'appearance'}
+                  onClick={() => setActiveCategory('appearance')}
+                  color="#5C2FFF"
+                />
+
+                <SelectButton
+                  icon={Rabbit}
+                  text="performance"
+                  active={activeCategory === 'performance'}
+                  onClick={() => setActiveCategory('performance')}
+                  color="#1085F3"
+                />
+
+                <SelectButton
+                  icon={Package}
+                  text="data and storage"
+                  active={activeCategory === 'data and storage'}
+                  onClick={() => setActiveCategory('data and storage')}
+                  color="#F38210"
+                />
+              </div>
+            </div>
+
+            {/* Right wide content section */}
+            <div className="settings-content">
+              {Object.keys(groupedSections).length === 0 ? (
+                <div className="settings-category-placeholder">
+                  <h3 className="settings-group-title">
+                    {isSearchActive ? 'no results' : activeCategory}
+                  </h3>
+                  <div style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginTop: '20px' }}>
+                    {isSearchActive ? 'No settings match your search query.' : 'Settings section placeholder.'}
+                  </div>
+                </div>
+              ) : (
+                <div className="settings-category-content">
+                  {Object.entries(groupedSections).map(([sectionTitle, items]) => (
+                    <div className="settings-group" key={sectionTitle}>
+                      <h3 className="settings-group-title">{sectionTitle}</h3>
+                      <GrayBox>
+                        {items.map((item) => (
+                          <SettingRow
+                            key={item.title}
+                            title={item.title}
+                            description={item.description}
+                          >
+                            {item.control}
+                          </SettingRow>
+                        ))}
+                      </GrayBox>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-        </FloatingFocusManager>
+        </div>,
+        document.body
       )}
     </>
   );
