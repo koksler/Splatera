@@ -1,0 +1,73 @@
+.tag-pic {
+  position: relative;
+  height: 200px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  cursor: pointer;
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  width: 100%;
+}
+
+.tag-pic-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.tag-pic-dim {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.tag-pic-count {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  height: 40px;
+  min-width: 40px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(42, 42, 42, 0.75);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border-radius: 10px;
+  color: var(--color-text-main);
+  font-size: 14px;
+  font-weight: 700;
+  box-sizing: border-box;
+}
+
+.tag-pic-title {
+  position: absolute;
+  bottom: 20px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: var(--color-text-main);
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 10px;
+  box-sizing: border-box;
+}
+
+.tag-pic:hover .tag-pic-dim {
+  background-color: rgba(0, 0, 0, 0.35);
+  transition: background-color 0.15s ease;
+}
+
+@media (max-width: 645px) {
+  .tag-pic-wrapper {
+    width: 150px !important;
+  }
+}

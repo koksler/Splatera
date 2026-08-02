@@ -1,0 +1,36 @@
+.tag-carousel-wrapper {
+  padding: 0 10px;
+  margin-top: 20px;
+}
+
+.tag-carousel-container {
+  position: relative;
+  overflow-x: hidden;
+  /* Hide scrollbar */
+  height: 202px;
+  cursor: grab;
+  width: 100%;
+}
+
+.tag-carousel-container:active {
+  cursor: grabbing;
+}
+
+.tag-carousel-track {
+  display: flex;
+  gap: 10px;
+  width: max-content;
+  height: 100%;
+}
+
+.tag-pic-wrapper {
+  flex-shrink: 0;
+  height: 200px;
+  will-change: width;
+}
+
+@media (max-width: 645px) {
+  .tag-pic-wrapper {
+    width: 150px !important;
+  }
+}
