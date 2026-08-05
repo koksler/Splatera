@@ -26,8 +26,14 @@
       "csp": null,
       "assetProtocol": {
       "enable": true,
-      "scope": ["**", "**/.splatera_library/**",
-          "**/splatera_library/**"] 
+      "scope": ["**", 
+                "**/.splatera_library/**",
+                "**/splatera_library/**", 
+                "$APPDATA/**",
+                "$APPDATA/.*/**",
+                "$HOME/.local/share/**",
+                "$HOME/.local/share/**/.*/**"
+              ] 
       }
     }
   },
