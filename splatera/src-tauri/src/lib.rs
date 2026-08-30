@@ -69,20 +69,29 @@ struct LibraryQuery {
 }
 
 fn get_config(app: &tauri::AppHandle) -> Result<AppConfig, String> {
-    let exe_path = env::current_exe().map_err(|e| e.to_string())?;
-    let exe_dir = exe_path.parent().ok_or("Cannot determine exe directory")?;
-
-    let portable_flag = exe_dir.join("portable.txt");
-
-    let lib_path = if portable_flag.exists() {
-        exe_dir.join(".splatera_library")
-    } else {
+    #[cfg(target_os = "linux")]
+    let lib_path = {
         let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
         app_dir.join(".splatera_library")
     };
 
+    #[cfg(not(target_os = "linux"))]
+    let lib_path = {
+        let exe_path = env::current_exe().map_err(|e| e.to_string())?;
+        let exe_dir = exe_path.parent().ok_or("Cannot determine exe directory")?;
+        let portable_flag = exe_dir.join("portable.txt");
+
+        if portable_flag.exists() {
+            exe_dir.join(".splatera_library")
+        } else {
+            let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            app_dir.join(".splatera_library")
+        }
+    };
+
     fs::create_dir_all(&lib_path).unwrap_or_default();
     fs::create_dir_all(lib_path.join("thumbnails")).unwrap_or_default();
+    fs::create_dir_all(lib_path.join("local")).unwrap_or_default();
 
     Ok(AppConfig {
         library_path: lib_path.to_string_lossy().into_owned(),
@@ -239,9 +248,12 @@ fn get_library(
         sql.push_str(" ORDER BY created_at DESC");
     }
 
-    let limit = query.limit.unwrap_or(50);
-    let offset = query.offset.unwrap_or(0);
-    sql.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
+    let limit = query.limit.unwrap_or(50) as usize;
+    let offset = query.offset.unwrap_or(0) as usize;
+    let has_color_filter = query.color.is_some();
+    if !has_color_filter {
+        sql.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
+    }
 
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
     let mut rows = stmt
@@ -319,6 +331,11 @@ fn get_library(
         }
 
         results.push(asset);
+    }
+
+    // Apply pagination in Rust for color-filtered results
+    if has_color_filter {
+        results = results.into_iter().skip(offset).take(limit).collect();
     }
 
     Ok(results)
@@ -857,6 +874,61 @@ async fn delete_asset_device(state: State<'_, AppState>, id: String) -> Result<S
 }
 
 #[tauri::command]
+async fn delete_assets_batch(state: State<'_, AppState>, ids: Vec<String>) -> Result<String, String> {
+    let mut conn = state.db.lock().map_err(|e| e.to_string())?;
+    let mut last_op_id = String::new();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    for id in &ids {
+        let asset_data = tx.query_row(
+            "SELECT id, original_path, preview_path, kind, dominant_colors, tags, size_bytes, file_name, extension, last_modified_os, width, height, created_at, content_snippet, is_broken, file_hash FROM assets WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(DeleteOperationData {
+                    id: row.get(0)?,
+                    original_path: row.get(1)?,
+                    preview_path: row.get(2)?,
+                    kind: row.get(3)?,
+                    dominant_colors: row.get(4)?,
+                    tags: row.get(5)?,
+                    size_bytes: row.get(6)?,
+                    file_name: row.get(7)?,
+                    extension: row.get(8)?,
+                    last_modified_os: row.get(9)?,
+                    width: row.get(10)?,
+                    height: row.get(11)?,
+                    created_at: row.get(12)?,
+                    content_snippet: row.get(13)?,
+                    is_broken: row.get(14)?,
+                    file_hash: row.get(15)?,
+                    deleted_from_device: false,
+                })
+            },
+        ).ok();
+
+        if let Some(data) = asset_data {
+            let op_id = format!("op_{}", Uuid::new_v4());
+            let details_json = serde_json::to_string(&data).unwrap_or_default();
+            let _ = tx.execute(
+                "INSERT INTO operation_log (id, op_type, timestamp, details_json) VALUES (?1, 'delete', ?2, ?3)",
+                params![op_id, timestamp, details_json],
+            );
+            last_op_id = op_id;
+        }
+
+        let _ = tx.execute("DELETE FROM assets WHERE id = ?1", params![id]);
+    }
+
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(last_op_id)
+}
+
+#[tauri::command]
 async fn log_import_operation(
     state: State<'_, AppState>,
     asset_ids: Vec<String>,
@@ -1053,9 +1125,47 @@ fn copy_file_to_os_clipboard(path: &str) -> Result<(), String> {
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     {
-        Err("File copy only supported on Windows for now".to_string())
+        use std::process::{Command, Stdio};
+        use std::io::Write;
+
+        let uri = format!("file://{}", path);
+
+        // Try wl-copy (Wayland) first
+        if let Ok(mut child) = Command::new("wl-copy")
+            .args(["-t", "text/uri-list"])
+            .stdin(Stdio::piped())
+            .spawn()
+        {
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(uri.as_bytes());
+            }
+            if child.wait().map(|s| s.success()).unwrap_or(false) {
+                return Ok(());
+            }
+        }
+
+        // Try xclip (X11) as fallback
+        if let Ok(mut child) = Command::new("xclip")
+            .args(["-selection", "clipboard", "-t", "text/uri-list"])
+            .stdin(Stdio::piped())
+            .spawn()
+        {
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(uri.as_bytes());
+            }
+            if child.wait().map(|s| s.success()).unwrap_or(false) {
+                return Ok(());
+            }
+        }
+
+        Err("Failed to copy file to clipboard. Ensure wl-copy or xclip is installed.".to_string())
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    {
+        Err("File copy not supported on this OS".to_string())
     }
 }
 
@@ -1201,6 +1311,7 @@ pub fn run() {
             delete_tag_and_assets,
             update_asset_tags,
             delete_asset,
+            delete_assets_batch,
             delete_asset_device,
             log_import_operation,
             undo_last_operation,
