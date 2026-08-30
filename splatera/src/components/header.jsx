@@ -39,17 +39,9 @@ export default memo(function Header({
   const headerRef = useRef(null);
   const appWindowRef = useRef(null);
 
-  useEffect(() => {
-    appWindowRef.current = getCurrentWindow();
-  }, []);
 
   useEffect(() => {
-    if (!headerRef.current) return;
-    const observer = new ResizeObserver(() => {
-      // Reserved for future header-height-dependent adjustments
-    });
-    observer.observe(headerRef.current);
-    return () => observer.disconnect();
+    appWindowRef.current = getCurrentWindow();
   }, []);
 
   const handleMinimize = useCallback(() => appWindowRef.current?.minimize(), []);

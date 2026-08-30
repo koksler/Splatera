@@ -37,7 +37,7 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
   const hoverTimeout = useRef(null);
   const [menuData, setMenuData] = useState({ open: false, x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
-  const [autoplay, setAutoplay] = useState(autoplayVideos);
+  const [isGifHovered, setIsGifHovered] = useState(false);
 
   const handleMouseDown = (e) => {
     if (e.shiftKey) {
@@ -55,11 +55,7 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
     }
   };
 
-  useEffect(() => {
-    const handler = (e) => setAutoplay(e.detail);
-    window.addEventListener('set-autoplay-videos', handler);
-    return () => window.removeEventListener('set-autoplay-videos', handler);
-  }, []);
+
 
   useEffect(() => {
     if (!data || !data.name) return;
@@ -89,7 +85,7 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
   const clampedAspect = Math.min(Math.max(rawAspect, 0.5), 2.2);
   const cardAspectRatio = `${clampedAspect}`;
 
-  const [isGifHovered, setIsGifHovered] = useState(false);
+
 
   const handleMouseEnter = () => {
     const isScrolling = document.querySelector('.app-container')?.classList.contains('is-scrolling');
@@ -110,7 +106,7 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
     setIsHovered(false);
     setIsGifHovered(false);
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-    if (videoRef.current && !autoplay) {
+    if (videoRef.current && !autoplayVideos) {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
     }
@@ -253,7 +249,7 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
       ) : (
         <div className="img-container" style={{ background: '#222', width: '100%', height: '100%', contain: 'layout paint' }}>
           <img
-            src={(isGif && isGifHovered) || (isAnimatable && autoplay) ? convertFileSrc(data.path) : (data.preview || PLACEHOLDER_IMG)}
+            src={(isGif && isGifHovered) || (isAnimatable && autoplayVideos) ? convertFileSrc(data.path) : (data.preview || PLACEHOLDER_IMG)}
             alt={data.name}
             loading="lazy"
             decoding="async"

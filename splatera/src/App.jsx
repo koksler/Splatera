@@ -96,6 +96,7 @@ function App() {
   const [autoplay, setAutoplay] = useState(false);
   const [tagPreviews, setTagPreviews] = useState([]);
   const settingsRef = useRef({});
+  const saveDebounceRef = useRef(null);
 
   const [selectedAssetIds, setSelectedAssetIds] = useState(new Set());
   const lastSelectedIndexRef = useRef(null);
@@ -395,20 +396,15 @@ function App() {
     setImages(prev => prev.filter(img => !deletedIds.has(img.id)));
     clearSelection();
 
-    let lastOpId = null;
-    let successCount = 0;
-    for (const asset of assetsToDelete) {
-      try {
-        const opId = await invoke('delete_asset', { id: asset.id });
-        lastOpId = opId;
-        successCount++;
-      } catch (err) {
-        console.error(`Failed to delete asset ${asset.id}:`, err);
-      }
+    try {
+      const lastOpId = await invoke('delete_assets_batch', { ids: assetsToDelete.map(a => a.id) });
+      setRefreshTrigger(prev => prev + 1);
+      showTemporaryNotif('Assets Removed', `${assetsToDelete.length} file(s) removed from library.`, { undoId: lastOpId, duration: 5000 });
+    } catch (err) {
+      console.error('Failed to batch delete:', err);
+      setRefreshTrigger(prev => prev + 1);
+      showTemporaryNotif('Delete Error', 'Some assets could not be deleted.');
     }
-
-    setRefreshTrigger(prev => prev + 1);
-    showTemporaryNotif('Assets Removed', `${successCount} file(s) removed from library.`, { undoId: lastOpId, duration: 5000 });
   }, [clearSelection]);
 
   const startImportFlow = async (filePaths) => {
@@ -624,10 +620,6 @@ function App() {
 
   // Undo operation handler
   const handleUndo = async () => {
-    if (notif.undoId === 'test-undo') {
-      showTemporaryNotif('Action Aborted', 'Operation was successfully undone.');
-      return;
-    }
     const savedImage = undoRef.current?.image;
     const targetOpId = notif.undoId || undoRef.current?.opId;
     try {
@@ -674,7 +666,12 @@ function App() {
 
   const handleRangeValChange = (nextValue) => {
     setRangeVal(nextValue);
-    saveAppSetting('rangeVal', nextValue);
+    settingsRef.current = { ...settingsRef.current, rangeVal: nextValue };
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = setTimeout(() => {
+      invoke('save_settings', { settings: JSON.stringify(settingsRef.current) })
+        .catch(err => console.error('Failed to save settings', err));
+    }, 300);
   };
 
   const handleAutoplayChange = (nextValue) => {
