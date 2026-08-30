@@ -1,21 +1,21 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Settings, DatabaseZap, Play, Trash2, Copy, CakeSlice, Rabbit, Package } from 'lucide-react';
+import { Settings, DatabaseZap, Trash2, CakeSlice, Rabbit, Package } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import Button from './button';
 import Toggle from './toggle';
 import SelectButton from './selectButton';
 import TextField from './textField';
-import TextBox from './TextBox';
+
 import PropertySelect from './PropertySelect';
 import SegmentedControl from './SegmentedControl';
 import RangeSlider from './RangeSlider';
-import Label from './label';
+
 import { GrayBox, SettingRow } from './GrayBox';
 import './settingsMenu.css';
 
 export default function SettingsMenu({
-  onDbUpdated,
+
   viewMode,
   setViewMode,
   snapHeader,
