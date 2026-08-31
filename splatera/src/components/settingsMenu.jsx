@@ -18,8 +18,8 @@ export default function SettingsMenu({
 
   viewMode,
   setViewMode,
-  snapHeader,
-  onSnapHeaderChange,
+  pillHeader,
+  onPillHeaderChange,
   themeMode,
   onThemeModeChange,
   rangeVal,
@@ -119,8 +119,8 @@ export default function SettingsMenu({
       description: 'If you like more floaty design, keep it on',
       control: (
         <Toggle
-          checked={snapHeader}
-          onChange={onSnapHeaderChange}
+          checked={pillHeader}
+          onChange={onPillHeaderChange}
         />
       )
     },
@@ -131,11 +131,12 @@ export default function SettingsMenu({
       description: 'Lower value = More images squeezed in',
       control: (
         <RangeSlider
-          min={0}
-          max={100}
-          steps={7}
+          min={1}
+          max={7}
+          steps={6}
           value={rangeVal}
           onChange={onRangeValChange}
+          formatTooltip={(v) => `${Math.round((1 + (v - 4) * 0.1) * 100)}%`}
         />
       )
     },

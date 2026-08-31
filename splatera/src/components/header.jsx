@@ -27,8 +27,8 @@ export default memo(function Header({
   setDateFilter,
   viewMode,
   setViewMode,
-  snapHeader,
-  onSnapHeaderChange,
+  pillHeader = true,
+  onPillHeaderChange,
   themeMode,
   onThemeModeChange,
   rangeVal,
@@ -94,7 +94,7 @@ export default memo(function Header({
   }, [setSelectedTags]);
 
   return (
-    <header className={`splatera-header ${snapHeader ? 'snapped' : ''}`} data-tauri-drag-region ref={headerRef}>
+    <header className={`splatera-header ${!pillHeader ? 'snapped' : ''}`} data-tauri-drag-region ref={headerRef}>
       <div className="splatera-header-card" data-tauri-drag-region>
 
         {/* Left Section */}
@@ -106,8 +106,8 @@ export default memo(function Header({
             <SettingsMenu
               viewMode={viewMode}
               setViewMode={setViewMode}
-              snapHeader={snapHeader}
-              onSnapHeaderChange={onSnapHeaderChange}
+              pillHeader={pillHeader}
+              onPillHeaderChange={onPillHeaderChange}
               themeMode={themeMode}
               onThemeModeChange={onThemeModeChange}
               rangeVal={rangeVal}
@@ -156,7 +156,7 @@ export default memo(function Header({
         <div className="header-right-part" data-tauri-drag-region>
           <div className="action-buttons">
             <div className="sort-menu-container">
-              <SortMenu sortOrder={sortOrder} setSortOrder={setSortOrder} snapHeader={snapHeader} />
+              <SortMenu sortOrder={sortOrder} setSortOrder={setSortOrder} snapHeader={!pillHeader} />
             </div>
             <div className="filter-menu-container">
               <FilterMenu
@@ -166,7 +166,7 @@ export default memo(function Header({
                 setSelectedTags={setSelectedTags}
                 dateFilter={dateFilter}
                 setDateFilter={setDateFilter}
-                snapHeader={snapHeader}
+                snapHeader={!pillHeader}
               />
             </div>
           </div>

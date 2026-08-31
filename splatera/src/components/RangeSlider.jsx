@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import { Tooltip } from './tooltip';
 import './RangeSlider.css';
 
 export default function RangeSlider({
@@ -9,7 +10,10 @@ export default function RangeSlider({
   value = 60,
   onChange,
   className = '',
+  formatTooltip,
 }) {
+  const [isHovered, setIsHovered] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   // Compute ticks array:
   // Use customTicks if provided, otherwise compute from steps (default 5 steps if neither is passed)
   const computedTicks = useMemo(() => {
@@ -49,11 +53,20 @@ export default function RangeSlider({
     }
   };
 
+  const tooltipContent = formatTooltip ? formatTooltip(closestTick) : null;
+
   return (
     <div className={`range-slider-wrapper ${className}`}>
-      <div className="range-slider-container">
+      <div
+        className="range-slider-container"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => {
+          setIsHovered(false);
+          setIsDragging(false);
+        }}
+      >
         <div className="range-slider-track">
-          <div className="range-slider-fill" style={{ width: `${percentage}%` }} />
+          <div className="range-slider-fill" style={{ width: `calc(10px + (100% - 20px) * ${percentage / 100})` }} />
           <div className="range-slider-ticks">
             {computedTicks.map((t, idx) => {
               const tickPct = ((t - tickMin) / (tickMax - tickMin)) * 100;
@@ -61,18 +74,32 @@ export default function RangeSlider({
                 <span
                   key={idx}
                   className="range-slider-tick"
-                  style={{ left: `${tickPct}%` }}
+                  style={{ left: `calc(10px + (100% - 20px) * ${tickPct / 100})` }}
                 />
               );
             })}
           </div>
         </div>
 
-        <div className="range-slider-thumb" style={{ left: `${percentage}%` }}>
-          <span className="range-slider-swatch-tick" />
-          <span className="range-slider-swatch-tick" />
-          <span className="range-slider-swatch-tick" />
-        </div>
+        {tooltipContent ? (
+          <Tooltip
+            content={tooltipContent}
+            position="top"
+            open={(isHovered || isDragging) && Boolean(tooltipContent)}
+          >
+            <div className="range-slider-thumb" style={{ left: `calc(10px + (100% - 20px) * ${percentage / 100})` }}>
+              <span className="range-slider-swatch-tick" />
+              <span className="range-slider-swatch-tick" />
+              <span className="range-slider-swatch-tick" />
+            </div>
+          </Tooltip>
+        ) : (
+          <div className="range-slider-thumb" style={{ left: `calc(10px + (100% - 20px) * ${percentage / 100})` }}>
+            <span className="range-slider-swatch-tick" />
+            <span className="range-slider-swatch-tick" />
+            <span className="range-slider-swatch-tick" />
+          </div>
+        )}
 
         <input
           type="range"
@@ -81,6 +108,13 @@ export default function RangeSlider({
           step={1}
           value={closestTick}
           onChange={handleChange}
+          onPointerDown={() => setIsDragging(true)}
+          onPointerUp={() => setIsDragging(false)}
+          onFocus={() => setIsHovered(true)}
+          onBlur={() => {
+            setIsHovered(false);
+            setIsDragging(false);
+          }}
           className="range-slider-input"
         />
       </div>

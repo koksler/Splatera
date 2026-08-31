@@ -82,7 +82,7 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
   const isGif = ext === 'gif';
   const isAnimatable = ext === 'gif' || ext === 'webp'; // gif always, webp when animated
   const rawAspect = data.width && data.height ? data.width / data.height : 1;
-  const clampedAspect = Math.min(Math.max(rawAspect, 0.5), 2.2);
+  const clampedAspect = Math.min(Math.max(rawAspect, 0.55), 1.85);
   const cardAspectRatio = `${clampedAspect}`;
 
 
