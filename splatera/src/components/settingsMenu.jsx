@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Settings, DatabaseZap, Trash2, CakeSlice, Rabbit, Package } from 'lucide-react';
+import { Settings, DatabaseZap, Trash2, CakeSlice, Rabbit, Package, SquareArrowOutUpRight } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import Button from './button';
 import Toggle from './toggle';
@@ -30,10 +30,16 @@ export default function SettingsMenu({
   const [isOpen, setIsOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState('appearance');
   const [searchVal, setSearchVal] = useState('');
+  const [libraryInfo, setLibraryInfo] = useState({ path: '', size_bytes: 0 });
 
   useEffect(() => {
     if (isOpen) {
       document.body.classList.add('settings-open');
+      invoke('get_library_info')
+        .then((info) => {
+          if (info) setLibraryInfo(info);
+        })
+        .catch((err) => console.error('Failed to get library info:', err));
     } else {
       document.body.classList.remove('settings-open');
     }
@@ -82,6 +88,14 @@ export default function SettingsMenu({
       setIsOpen(false);
     } catch (error) {
       console.error("Error clearing library:", error);
+    }
+  };
+
+  const handleOpenLibraryFolder = async () => {
+    try {
+      await invoke('open_library_folder');
+    } catch (error) {
+      console.error("Error opening library folder:", error);
     }
   };
 
@@ -149,6 +163,46 @@ export default function SettingsMenu({
         <Toggle
           checked={autoplay}
           onChange={handleToggleAutoplay}
+        />
+      )
+    },
+    {
+      category: 'data and storage',
+      group: 'on drive',
+      title: 'Database folder',
+      description: 'Your library path, where thumbnails, some assets and links are stored',
+      control: (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <TextField
+            value={
+              libraryInfo.path
+                ? (libraryInfo.path.length > 20 ? `${libraryInfo.path.slice(0, 20)}...` : libraryInfo.path)
+                : ''
+            }
+            readOnly
+            title={libraryInfo.path || ''}
+            style={{ width: '160px', minWidth: '160px' }}
+          />
+          <Button
+            icon={SquareArrowOutUpRight}
+            onClick={handleOpenLibraryFolder}
+            tooltip="Open in file manager"
+            tooltipPosition="bottom"
+          />
+        </div>
+      )
+    },
+    {
+      category: 'data and storage',
+      group: 'on drive',
+      title: 'Database weight',
+      description: 'Total disk space occupied by the library',
+      control: (
+        <TextField
+          value={libraryInfo.size_bytes ? `${(libraryInfo.size_bytes / (1024 * 1024)).toFixed(1)} MB` : '0.0 MB'}
+          readOnly
+          disabled
+          style={{ width: '200px', minWidth: '160px', cursor: 'default' }}
         />
       )
     },

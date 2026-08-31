@@ -1103,6 +1103,61 @@ async fn open_in_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+struct LibraryInfo {
+    path: String,
+    size_bytes: u64,
+}
+
+fn calculate_dir_size(path: &Path) -> u64 {
+    let mut total_size = 0;
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                total_size += calculate_dir_size(&p);
+            } else if let Ok(meta) = entry.metadata() {
+                total_size += meta.len();
+            }
+        }
+    }
+    total_size
+}
+
+#[tauri::command]
+async fn get_library_info(state: State<'_, AppState>) -> Result<LibraryInfo, String> {
+    let lib_path = PathBuf::from(&state.config.library_path);
+    let size_bytes = calculate_dir_size(&lib_path);
+    Ok(LibraryInfo {
+        path: state.config.library_path.clone(),
+        size_bytes,
+    })
+}
+
+#[tauri::command]
+async fn open_library_folder(state: State<'_, AppState>) -> Result<(), String> {
+    let path = &state.config.library_path;
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("explorer")
+        .arg(path)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open")
+        .arg(path)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "linux")]
+    std::process::Command::new("xdg-open")
+        .arg(path)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 
 
 fn copy_file_to_os_clipboard(path: &str) -> Result<(), String> {
@@ -1325,6 +1380,8 @@ pub fn run() {
             save_settings,
             load_settings,
             processing::expand_directory,
+            get_library_info,
+            open_library_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
