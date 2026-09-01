@@ -13,7 +13,7 @@ export default function HelpDock({
 }) {
   const [currentLayer, setCurrentLayer] = useState(0);
   const containerRef = useRef(null);
-  const totalLayers = Math.ceil(selectedAssets.length / 7);
+  const totalLayers = Math.ceil(selectedAssets.length / 5);
 
   // Reset or clamp current layer if selectedAssets count changes
   useEffect(() => {
@@ -46,8 +46,8 @@ export default function HelpDock({
 
   if (!selectedAssets || selectedAssets.length === 0) return null;
 
-  const startIndex = currentLayer * 7;
-  const currentAssets = selectedAssets.slice(startIndex, startIndex + 7);
+  const startIndex = currentLayer * 5;
+  const currentAssets = selectedAssets.slice(startIndex, startIndex + 5);
 
   const handleCancelClick = () => {
     if (onClearSelection) onClearSelection();
