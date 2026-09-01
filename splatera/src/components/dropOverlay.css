@@ -25,7 +25,7 @@
   }
   
   .drop-box {
-    background-color: rgba(34, 34, 34, 0.8);
+    background-color: var(--color-blur-bg);
     backdrop-filter: blur(40px);
     -webkit-backdrop-filter: blur(40px);     
     border: 1px solid var(--color-border);

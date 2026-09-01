@@ -27,8 +27,9 @@
   padding: 0;
   margin: 10px;
 
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 14px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .splatera-input::placeholder {

@@ -20,9 +20,13 @@ export const Tooltip = ({
   content,
   hotkey,
   position = 'bottom',
-  disabled = false
+  disabled = false,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isOpen = controlledOpen !== undefined ? controlledOpen : uncontrolledOpen;
+  const setIsOpen = controlledOnOpenChange ?? setUncontrolledOpen;
 
   const { refs, floatingStyles, context } = useFloating({
     open: isOpen,

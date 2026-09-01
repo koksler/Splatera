@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredVa
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { MasonryScroller, usePositioner } from 'masonic';
+import { MasonryScroller } from 'masonic';
 
 import './App.css';
 import Header from './components/header';
@@ -90,12 +90,13 @@ function App() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [viewMode, setViewMode] = useState('grid');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [snapHeader, setSnapHeader] = useState(false);
+  const [pillHeader, setPillHeader] = useState(true);
   const [themeMode, setThemeMode] = useState('System');
-  const [rangeVal, setRangeVal] = useState(60);
+  const [rangeVal, setRangeVal] = useState(4);
   const [autoplay, setAutoplay] = useState(false);
   const [tagPreviews, setTagPreviews] = useState([]);
   const settingsRef = useRef({});
+  const saveDebounceRef = useRef(null);
 
   const [selectedAssetIds, setSelectedAssetIds] = useState(new Set());
   const lastSelectedIndexRef = useRef(null);
@@ -395,20 +396,15 @@ function App() {
     setImages(prev => prev.filter(img => !deletedIds.has(img.id)));
     clearSelection();
 
-    let lastOpId = null;
-    let successCount = 0;
-    for (const asset of assetsToDelete) {
-      try {
-        const opId = await invoke('delete_asset', { id: asset.id });
-        lastOpId = opId;
-        successCount++;
-      } catch (err) {
-        console.error(`Failed to delete asset ${asset.id}:`, err);
-      }
+    try {
+      const lastOpId = await invoke('delete_assets_batch', { ids: assetsToDelete.map(a => a.id) });
+      setRefreshTrigger(prev => prev + 1);
+      showTemporaryNotif('Assets Removed', `${assetsToDelete.length} file(s) removed from library.`, { undoId: lastOpId, duration: 5000 });
+    } catch (err) {
+      console.error('Failed to batch delete:', err);
+      setRefreshTrigger(prev => prev + 1);
+      showTemporaryNotif('Delete Error', 'Some assets could not be deleted.');
     }
-
-    setRefreshTrigger(prev => prev + 1);
-    showTemporaryNotif('Assets Removed', `${successCount} file(s) removed from library.`, { undoId: lastOpId, duration: 5000 });
   }, [clearSelection]);
 
   const startImportFlow = async (filePaths) => {
@@ -466,14 +462,21 @@ function App() {
         try {
           const settings = JSON.parse(settingsStr);
           settingsRef.current = settings;
-          if (settings.snapHeader !== undefined) {
-            setSnapHeader(settings.snapHeader);
+          if (settings.pillHeader !== undefined) {
+            setPillHeader(settings.pillHeader);
+          } else if (settings.snapHeader !== undefined) {
+            setPillHeader(!settings.snapHeader);
           }
           if (settings.themeMode !== undefined) {
             setThemeMode(settings.themeMode);
           }
           if (settings.rangeVal !== undefined) {
-            setRangeVal(settings.rangeVal);
+            const parsed = Number(settings.rangeVal);
+            if (!isNaN(parsed) && parsed >= 1 && parsed <= 7) {
+              setRangeVal(Math.round(parsed));
+            } else {
+              setRangeVal(4);
+            }
           }
           if (settings.autoplay !== undefined) {
             setAutoplay(settings.autoplay);
@@ -557,12 +560,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (snapHeader) {
-      document.documentElement.style.setProperty('--scrollbar-track-margin-top', '75px');
-    } else {
+    if (pillHeader) {
       document.documentElement.style.setProperty('--scrollbar-track-margin-top', '160px');
+    } else {
+      document.documentElement.style.setProperty('--scrollbar-track-margin-top', '75px');
     }
-  }, [snapHeader]);
+  }, [pillHeader]);
 
   useEffect(() => {
     const applyTheme = (mode) => {
@@ -624,10 +627,6 @@ function App() {
 
   // Undo operation handler
   const handleUndo = async () => {
-    if (notif.undoId === 'test-undo') {
-      showTemporaryNotif('Action Aborted', 'Operation was successfully undone.');
-      return;
-    }
     const savedImage = undoRef.current?.image;
     const targetOpId = notif.undoId || undoRef.current?.opId;
     try {
@@ -662,9 +661,9 @@ function App() {
     }
   };
 
-  const handleToggleSnapHeader = (nextValue) => {
-    setSnapHeader(nextValue);
-    saveAppSetting('snapHeader', nextValue);
+  const handleTogglePillHeader = (nextValue) => {
+    setPillHeader(nextValue);
+    saveAppSetting('pillHeader', nextValue);
   };
 
   const handleThemeModeChange = (nextValue) => {
@@ -674,7 +673,12 @@ function App() {
 
   const handleRangeValChange = (nextValue) => {
     setRangeVal(nextValue);
-    saveAppSetting('rangeVal', nextValue);
+    settingsRef.current = { ...settingsRef.current, rangeVal: nextValue };
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = setTimeout(() => {
+      invoke('save_settings', { settings: JSON.stringify(settingsRef.current) })
+        .catch(err => console.error('Failed to save settings', err));
+    }, 300);
   };
 
   const handleAutoplayChange = (nextValue) => {
@@ -721,8 +725,8 @@ function App() {
         setDateFilter={setDateFilter}
         viewMode={viewMode}
         setViewMode={handleViewModeChange}
-        snapHeader={snapHeader}
-        onSnapHeaderChange={handleToggleSnapHeader}
+        pillHeader={pillHeader}
+        onPillHeaderChange={handleTogglePillHeader}
         themeMode={themeMode}
         onThemeModeChange={handleThemeModeChange}
         rangeVal={rangeVal}
@@ -827,7 +831,86 @@ function App() {
 
 // ─── Justified layout positioner ─────────────────────────────────────────────
 
-const useJustifiedPositioner = ({ width, items = [], gutter = 15, targetHeight = 280 }) => {
+// ─── Vertical Masonry layout positioner ──────────────────────────────────────
+
+const useVerticalMasonryPositioner = ({ width, items = [], gutter = 20, targetColWidth = 320 }) => {
+  return useMemo(() => {
+    if (!width || !items || items.length === 0) {
+      return {
+        width: width || 0,
+        height: 0,
+        estimateHeight: () => 0,
+        get: () => undefined,
+        all: () => [],
+        set: () => { }, update: () => { }, shortestColumn: () => 0,
+        columnWidth: 1, columnCount: 1, size: () => 0,
+        range: () => { }
+      };
+    }
+
+    const numColumns = Math.max(1, Math.floor((width + gutter) / (targetColWidth + gutter)));
+    const colWidth = (width - (numColumns - 1) * gutter) / numColumns;
+    const colHeights = new Array(numColumns).fill(0);
+    const coords = new Array(items.length);
+
+    for (let i = 0; i < items.length; i++) {
+      const curItem = items[i];
+      const rawAR = (curItem && curItem.width && curItem.height) ? (curItem.width / curItem.height) : 1;
+      const clampedAR = Math.min(Math.max(rawAR, 0.55), 1.85);
+      const itemHeight = Math.round(colWidth / clampedAR);
+
+      let shortestCol = 0;
+      let minH = colHeights[0];
+      for (let c = 1; c < numColumns; c++) {
+        if (colHeights[c] < minH) {
+          minH = colHeights[c];
+          shortestCol = c;
+        }
+      }
+
+      const top = colHeights[shortestCol];
+      const left = shortestCol * (colWidth + gutter);
+
+      coords[i] = { top, left, width: colWidth, height: itemHeight };
+      colHeights[shortestCol] += itemHeight + gutter;
+    }
+
+    const totalHeight = Math.max(...colHeights, 0);
+
+    return {
+      width,
+      height: totalHeight,
+      estimateHeight: () => totalHeight,
+      get: (index) => coords[index],
+      all: () => coords,
+      set: () => { }, update: () => { },
+      shortestColumn: () => {
+        let minH = colHeights[0];
+        let col = 0;
+        for (let c = 1; c < numColumns; c++) {
+          if (colHeights[c] < minH) {
+            minH = colHeights[c];
+            col = c;
+          }
+        }
+        return col;
+      },
+      columnWidth: colWidth,
+      columnCount: numColumns,
+      size: () => coords.length,
+      range: (lo, hi, cb) => {
+        for (let idx = 0; idx < coords.length; idx++) {
+          const pos = coords[idx];
+          if (pos && pos.top + pos.height > lo && pos.top < hi) cb(idx, pos.left, pos.top);
+        }
+      }
+    };
+  }, [width, items, gutter, targetColWidth]);
+};
+
+// ─── Justified layout positioner ─────────────────────────────────────────────
+
+const useJustifiedPositioner = ({ width, items = [], gutter = 20, targetHeight = 280 }) => {
   return useMemo(() => {
     const coords = [];
     if (!width || !items || items.length === 0) {
@@ -853,7 +936,7 @@ const useJustifiedPositioner = ({ width, items = [], gutter = 15, targetHeight =
       while (i < items.length) {
         const curItem = items[i];
         const rawAR = (curItem && curItem.width && curItem.height) ? (curItem.width / curItem.height) : 1;
-        const itemAR = Math.min(Math.max(rawAR, 0.5), 2.2);
+        const itemAR = Math.min(Math.max(rawAR, 0.55), 1.85);
         rowItems.push({ index: i, ar: itemAR });
         rowAspectRatio += itemAR;
         i++;
@@ -948,24 +1031,20 @@ const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore, 
     };
   }, []);
 
-  const minColumnWidth = 150 + (rangeVal / 100) * 350;
+  const currentLevel = Math.max(1, Math.min(7, rangeVal ?? 4));
+  const targetColWidth = Math.round(320 * Math.pow(1.3, currentLevel - 4));
+  const targetRowHeight = Math.round(280 * Math.pow(1.25, currentLevel - 4));
   const standardGutter = 20;
-  const numColumns = Math.max(1, Math.floor((containerWidth + standardGutter) / (minColumnWidth + standardGutter)));
 
-  const activeColWidth = viewMode === 'horizontal'
-    ? minColumnWidth
-    : (containerWidth - (numColumns - 1) * standardGutter) / numColumns;
-
-  const positioner = usePositioner(
-    { width: containerWidth, columnWidth: activeColWidth, columnGutter: standardGutter, padding: 0 },
-    [items, containerWidth, activeColWidth, standardGutter]
-  );
-
-  const justifiedPositioner = useJustifiedPositioner({
-    width: containerWidth, items, gutter: standardGutter, targetHeight: 280
+  const verticalPositioner = useVerticalMasonryPositioner({
+    width: containerWidth, items, gutter: standardGutter, targetColWidth
   });
 
-  const activePositioner = viewMode === 'horizontal' ? justifiedPositioner : positioner;
+  const justifiedPositioner = useJustifiedPositioner({
+    width: containerWidth, items, gutter: standardGutter, targetHeight: targetRowHeight
+  });
+
+  const activePositioner = viewMode === 'horizontal' ? justifiedPositioner : verticalPositioner;
   positionerRef.current = activePositioner;
 
   // Pass onOpenLightbox, isSelected, onToggleSelect, and hasSelection to each card via render prop

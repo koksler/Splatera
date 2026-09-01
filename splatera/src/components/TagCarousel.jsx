@@ -63,15 +63,25 @@ export default function TagCarousel({ tags, onTagClick, isMinimal }) {
   const [menuData, setMenuData] = useState({ open: false, x: 0, y: 0, tag: null, count: 0 });
   const [modalMode, setModalMode] = useState(null); // null | 'delete_only_tag' | 'delete_tag_assets'
 
-  // Smooth scroll LERP animation loop
+  // RAF idle management — loop stops when converged, restarts on interaction
+  const rafIdRef = useRef(null);
+  const stepFnRef = useRef(null);
+
+  const restartAnimation = useCallback(() => {
+    if (rafIdRef.current) return; // already running
+    if (stepFnRef.current) {
+      rafIdRef.current = requestAnimationFrame(stepFnRef.current);
+    }
+  }, []);
+
+  // Smooth scroll LERP animation loop (idles when converged)
   useEffect(() => {
     if (count === 0) return;
-    let animationFrameId;
 
     const step = () => {
       const container = containerRef.current;
       if (!container) {
-        animationFrameId = requestAnimationFrame(step);
+        rafIdRef.current = requestAnimationFrame(step);
         return;
       }
 
@@ -82,39 +92,47 @@ export default function TagCarousel({ tags, onTagClick, isMinimal }) {
         if (isDragging.current) {
           dragStartScrollLeft.current += oneCopyWidth;
         }
-        updateTargetIndex(targetIndexRef.current + count);
+        targetIndexRef.current += count;
+        setTargetIndex(targetIndexRef.current);
       } else if (currentScrollLeft >= 4 * oneCopyWidth) {
         container.scrollLeft -= oneCopyWidth;
         if (isDragging.current) {
           dragStartScrollLeft.current -= oneCopyWidth;
         }
-        updateTargetIndex(targetIndexRef.current - count);
+        targetIndexRef.current -= count;
+        setTargetIndex(targetIndexRef.current);
       }
 
       // If the user is dragging, do not run the snapping LERP
       if (isDragging.current) {
-        animationFrameId = requestAnimationFrame(step);
+        rafIdRef.current = requestAnimationFrame(step);
         return;
       }
 
       const targetCard = container.querySelector(`.tag-pic-wrapper[data-index="${targetIndexRef.current}"]`);
       if (targetCard) {
         const targetScrollLeft = targetCard.offsetLeft;
-        const currentScrollLeft = container.scrollLeft;
-        const diff = targetScrollLeft - currentScrollLeft;
+        const diff = targetScrollLeft - container.scrollLeft;
 
         if (Math.abs(diff) > 0.5) {
           container.scrollLeft += diff * 0.22; // Snappy LERP snapped speed
+          rafIdRef.current = requestAnimationFrame(step);
         } else {
           container.scrollLeft = targetScrollLeft;
+          rafIdRef.current = null; // Converged — stop loop, will restart on next interaction
         }
+      } else {
+        rafIdRef.current = requestAnimationFrame(step);
       }
-
-      animationFrameId = requestAnimationFrame(step);
     };
 
-    animationFrameId = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(animationFrameId);
+    stepFnRef.current = step;
+    rafIdRef.current = requestAnimationFrame(step);
+    return () => {
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+      stepFnRef.current = null;
+    };
   }, [count, oneCopyWidth]);
 
   // Initial scroll position alignment
@@ -139,7 +157,8 @@ export default function TagCarousel({ tags, onTagClick, isMinimal }) {
     if (next < 0) next = 0;
     if (next >= repeatedTags.length) next = repeatedTags.length - 1;
     updateTargetIndex(next);
-  }, [count, repeatedTags.length]);
+    restartAnimation();
+  }, [count, repeatedTags.length, restartAnimation]);
 
   // Wheel scrolling (1 card increment per notch)
   const handleWheel = useCallback((e) => {
@@ -196,7 +215,8 @@ export default function TagCarousel({ tags, onTagClick, isMinimal }) {
     hasDraggedRef.current = false;
 
     container.classList.add('is-dragging');
-  }, []);
+    restartAnimation();
+  }, [restartAnimation]);
 
   const handleMouseMove = useCallback((e) => {
     if (!isDragging.current) return;
@@ -246,7 +266,8 @@ export default function TagCarousel({ tags, onTagClick, isMinimal }) {
     if (finalIndex >= repeatedTags.length) finalIndex = repeatedTags.length - 1;
 
     updateTargetIndex(finalIndex);
-  }, [findNearestCardIndex, repeatedTags.length]);
+    restartAnimation();
+  }, [findNearestCardIndex, repeatedTags.length, restartAnimation]);
 
   // Attach wheel event listener natively to guarantee non-passive prevention
   useEffect(() => {

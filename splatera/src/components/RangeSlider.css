@@ -1,7 +1,8 @@
 .range-slider-wrapper {
   display: flex;
   align-items: center;
-  width: 100%;
+  width: 200px;
+  min-width: 160px;
   box-sizing: border-box;
 }
 
@@ -21,7 +22,7 @@
   left: 0;
   right: 0;
   height: 10px;
-  border-radius: 9999px;
+  border-radius: 4px;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   overflow: hidden;
