@@ -114,6 +114,14 @@
   display: flex;
   flex-direction: column;
   color: var(--color-text-main);
+  transition: all 0.2s ease;
+}
+
+.settings-sidebar-top {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
 }
 
 .settings-header-group {
@@ -155,9 +163,18 @@
   flex-direction: column;
   gap: 10px;
   margin-top: 10px;
-  /* 30px gap between button categories is handled by divider margins + list margin */
   overflow-y: auto;
   flex: 1;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.settings-categories-list::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-sidebar .select-btn:not(.minimized) {
+  width: 100%;
 }
 
 /* Right content panel */
@@ -175,6 +192,159 @@
   overflow-y: auto;
   overflow-x: hidden;
   text-align: left;
+  transition: all 0.2s ease;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.settings-content::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-sidebar,
+.settings-popover {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.settings-sidebar::-webkit-scrollbar,
+.settings-popover::-webkit-scrollbar {
+  display: none;
+}
+
+/* Collapsed layout (programmatic class and media query for <= 800px) */
+.settings-modal-content-wrapper.collapsed {
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 400px;
+  max-height: 90vh;
+}
+
+.settings-modal-content-wrapper.collapsed .settings-sidebar {
+  width: 100%;
+  max-width: 400px;
+  height: 120px;
+  padding: 12px 16px;
+  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.settings-modal-content-wrapper.collapsed .settings-sidebar-top {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-modal-content-wrapper.collapsed .settings-search-box {
+  margin-top: 0;
+  width: 180px;
+  min-width: 130px;
+  flex-shrink: 1;
+}
+
+.settings-modal-content-wrapper.collapsed .settings-panel-divider {
+  display: none;
+}
+
+.settings-modal-content-wrapper.collapsed .settings-categories-list {
+  flex-direction: row;
+  gap: 8px;
+  margin-top: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.settings-modal-content-wrapper.collapsed .settings-categories-list::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-modal-content-wrapper.collapsed .settings-content {
+  width: 100%;
+  max-width: 400px;
+  height: calc(90vh - 130px);
+  max-height: 520px;
+  padding: 16px;
+  gap: 16px;
+  box-sizing: border-box;
+  flex: 1;
+}
+
+@media (max-width: 800px) {
+  .settings-modal-content-wrapper {
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    max-width: 400px;
+    max-height: 90vh;
+  }
+
+  .settings-sidebar {
+    width: 100% !important;
+    max-width: 400px !important;
+    height: 120px !important;
+    padding: 12px 16px !important;
+    gap: 10px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    box-sizing: border-box !important;
+    flex-shrink: 0 !important;
+  }
+
+  .settings-sidebar-top {
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 12px !important;
+  }
+
+  .settings-sidebar .settings-search-box {
+    margin-top: 0 !important;
+    width: 180px !important;
+    min-width: 130px !important;
+    flex-shrink: 1 !important;
+  }
+
+  .settings-panel-divider {
+    display: none !important;
+  }
+
+  .settings-categories-list {
+    flex-direction: row !important;
+    gap: 8px !important;
+    margin-top: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    width: 100% !important;
+    padding-bottom: 2px !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+
+  .settings-categories-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .settings-content {
+    width: 100% !important;
+    max-width: 400px !important;
+    height: calc(90vh - 130px) !important;
+    max-height: 520px !important;
+    padding: 16px !important;
+    gap: 16px !important;
+    box-sizing: border-box !important;
+    flex: 1 !important;
+  }
 }
 
 .settings-category-content {

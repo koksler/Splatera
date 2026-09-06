@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Settings, DatabaseZap, Trash2, CakeSlice, Rabbit, Package, SquareArrowOutUpRight } from 'lucide-react';
+import {
+  Settings,
+  DatabaseZap,
+  Trash2,
+  CakeSlice,
+  Rabbit,
+  Package,
+  SquareArrowOutUpRight
+} from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import Button from './button';
 import Toggle from './toggle';
@@ -12,7 +20,14 @@ import SegmentedControl from './SegmentedControl';
 import RangeSlider from './RangeSlider';
 
 import { GrayBox, SettingRow } from './GrayBox';
+import { APP_VERSION } from '../version';
 import './settingsMenu.css';
+
+const CATEGORIES = [
+  { id: 'appearance', label: 'appearance', icon: CakeSlice, color: '#5C2FFF' },
+  { id: 'performance', label: 'performance', icon: Rabbit, color: '#1085F3' },
+  { id: 'data and storage', label: 'data and storage', icon: Package, color: '#F38210' },
+];
 
 export default function SettingsMenu({
 
@@ -31,6 +46,15 @@ export default function SettingsMenu({
   const [activeCategory, setActiveCategory] = useState('appearance');
   const [searchVal, setSearchVal] = useState('');
   const [libraryInfo, setLibraryInfo] = useState({ path: '', size_bytes: 0 });
+  const [isCollapsed, setIsCollapsed] = useState(typeof window !== 'undefined' ? window.innerWidth <= 800 : false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsCollapsed(window.innerWidth <= 800);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -266,48 +290,38 @@ export default function SettingsMenu({
 
       {isOpen && createPortal(
         <div className="settings-modal-overlay" onClick={() => setIsOpen(false)}>
-          <div className="settings-modal-content-wrapper" onClick={(e) => e.stopPropagation()}>
+          <div className={`settings-modal-content-wrapper ${isCollapsed ? 'collapsed' : ''}`} onClick={(e) => e.stopPropagation()}>
             
-            {/* Left categories sidebar */}
+            {/* Left categories sidebar / Top menu bar */}
             <div className="settings-sidebar">
-              <div className="settings-header-group">
-                <h2 className="settings-title">Settings</h2>
-                <span className="settings-subtitle">v1.0.0-stable</span>
-              </div>
+              <div className="settings-sidebar-top">
+                <div className="settings-header-group">
+                  <h2 className="settings-title">Settings</h2>
+                  <span className="settings-subtitle">{APP_VERSION}</span>
+                </div>
 
-              <TextField
-                className="settings-search-box"
-                placeholder="Search"
-                value={searchVal}
-                onChange={(e) => setSearchVal(e.target.value)}
-              />
+                <TextField
+                  className="settings-search-box"
+                  placeholder="Search"
+                  value={searchVal}
+                  onChange={(e) => setSearchVal(e.target.value)}
+                />
+              </div>
 
               <div className="settings-panel-divider" />
 
               <div className="settings-categories-list">
-                <SelectButton
-                  icon={CakeSlice}
-                  text="appearance"
-                  active={activeCategory === 'appearance'}
-                  onClick={() => setActiveCategory('appearance')}
-                  color="#5C2FFF"
-                />
-
-                <SelectButton
-                  icon={Rabbit}
-                  text="performance"
-                  active={activeCategory === 'performance'}
-                  onClick={() => setActiveCategory('performance')}
-                  color="#1085F3"
-                />
-
-                <SelectButton
-                  icon={Package}
-                  text="data and storage"
-                  active={activeCategory === 'data and storage'}
-                  onClick={() => setActiveCategory('data and storage')}
-                  color="#F38210"
-                />
+                {CATEGORIES.map((cat) => (
+                  <SelectButton
+                    key={cat.id}
+                    icon={cat.icon}
+                    text={cat.label}
+                    minimized={isCollapsed}
+                    active={activeCategory === cat.id}
+                    onClick={() => setActiveCategory(cat.id)}
+                    color={cat.color}
+                  />
+                ))}
               </div>
             </div>
 
