@@ -11,6 +11,14 @@
   pointer-events: none !important;
 }
 
+html.no-blur,
+html.no-blur *,
+html.no-blur *::before,
+html.no-blur *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 html::-webkit-scrollbar,
 body::-webkit-scrollbar {
   width: 0px !important;

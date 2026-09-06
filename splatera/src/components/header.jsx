@@ -35,6 +35,14 @@ export default memo(function Header({
   onRangeValChange,
   autoplay,
   onAutoplayChange,
+  thumbnailSize,
+  onThumbnailSizeChange,
+  disableBlur,
+  onDisableBlurChange,
+  batchSize,
+  onBatchSizeChange,
+  gpuAcceleration,
+  onGpuAccelerationChange,
 }) {
   const headerRef = useRef(null);
   const appWindowRef = useRef(null);
@@ -114,6 +122,14 @@ export default memo(function Header({
               onRangeValChange={onRangeValChange}
               autoplay={autoplay}
               onAutoplayChange={onAutoplayChange}
+              thumbnailSize={thumbnailSize}
+              onThumbnailSizeChange={onThumbnailSizeChange}
+              disableBlur={disableBlur}
+              onDisableBlurChange={onDisableBlurChange}
+              batchSize={batchSize}
+              onBatchSizeChange={onBatchSizeChange}
+              gpuAcceleration={gpuAcceleration}
+              onGpuAccelerationChange={onGpuAccelerationChange}
             />
           </div>
           <div className="import-btn-container">

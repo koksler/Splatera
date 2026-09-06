@@ -54,6 +54,7 @@ pub struct AppConfig {
     pub library_path: String,
     pub theme_mode: String,
     pub thumbnail_size: u32,
+    pub gpu_acceleration: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,17 +94,45 @@ fn get_config(app: &tauri::AppHandle) -> Result<AppConfig, String> {
     fs::create_dir_all(lib_path.join("thumbnails")).unwrap_or_default();
     fs::create_dir_all(lib_path.join("local")).unwrap_or_default();
 
+    let settings_file = lib_path.join("settings.json");
+    let mut thumb_size = 400;
+    let mut gpu_accel = true;
+    if settings_file.exists() {
+        if let Ok(content) = fs::read_to_string(&settings_file) {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(ts) = val.get("thumbnailSize").and_then(|v| v.as_u64()) {
+                    thumb_size = ts as u32;
+                }
+                if let Some(ga) = val.get("gpuAcceleration").and_then(|v| v.as_bool()) {
+                    gpu_accel = ga;
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    if !gpu_accel {
+        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu --disable-gpu-compositing");
+    }
+
     Ok(AppConfig {
         library_path: lib_path.to_string_lossy().into_owned(),
         theme_mode: "dark".to_string(),
-        thumbnail_size: 400,
+        thumbnail_size: thumb_size,
+        gpu_acceleration: gpu_accel,
     })
 }
 
 pub struct AppState {
-    pub config: AppConfig,
+    pub config: Mutex<AppConfig>,
     pub db: Mutex<Connection>,
     pub clipboard: Mutex<Clipboard>,
+}
+
+impl AppState {
+    pub fn config(&self) -> AppConfig {
+        self.config.lock().unwrap().clone()
+    }
 }
 
 fn get_db_path(config: &AppConfig) -> PathBuf {
@@ -261,7 +290,8 @@ fn get_library(
         .map_err(|e| e.to_string())?;
 
     let mut results = Vec::new();
-    let lib_path = Path::new(&state.config.library_path);
+    let lib_path_buf = state.config().library_path;
+    let lib_path = Path::new(&lib_path_buf);
 
     while let Some(row) = rows.next().map_err(|e| e.to_string())? {
         let kind_str: String = row.get(3).unwrap_or("Unknown".to_string());
@@ -556,7 +586,8 @@ async fn delete_tag_and_assets(state: State<'_, AppState>, tag: String) -> Resul
 
 #[tauri::command]
 async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
-    let config = state.config.clone();
+    let config = state.config();
+    let config_clone = config.clone();
 
     let assets: Vec<Asset> = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
@@ -627,8 +658,14 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
                         if a.dominant_colors.is_empty() {
                             a.dominant_colors = extract_colors(&img);
                         }
-                        if let Some(new_thumb) = save_thumbnail(&img, &a.id, &config) {
-                            a.preview_path = Some(new_thumb);
+                        let needs_thumb = match &a.preview_path {
+                            Some(p) => !Path::new(p).exists(),
+                            None => true,
+                        };
+                        if needs_thumb {
+                            if let Some(new_thumb) = save_thumbnail(&img, &a.id, &config_clone) {
+                                a.preview_path = Some(new_thumb);
+                            }
                         }
                     }
                 } else if a.kind == AssetKind::Video {
@@ -637,8 +674,14 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
                         a.width = w;
                         a.height = h;
                     }
-                    if let Some(new_thumb) = generate_video_thumbnail(orig_path, &a.id, &config) {
-                        a.preview_path = Some(new_thumb);
+                    let needs_thumb = match &a.preview_path {
+                        Some(p) => !Path::new(p).exists(),
+                        None => true,
+                    };
+                    if needs_thumb {
+                        if let Some(new_thumb) = generate_video_thumbnail(orig_path, &a.id, &config_clone) {
+                            a.preview_path = Some(new_thumb);
+                        }
                     }
                 }
                 if a.file_hash.is_none() || a.file_hash.as_deref() == Some("") {
@@ -657,27 +700,43 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
     let mut conn = state.db.lock().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 
-    tx.execute("DELETE FROM assets", ())
-        .map_err(|e| e.to_string())?;
-    for a in valid {
+    for a in &valid {
         let tags_json = serde_json::to_string(&a.tags).unwrap_or_default();
         let color_json = serde_json::to_string(&a.dominant_colors).unwrap_or_default();
         let _ = tx.execute(
-            "INSERT INTO assets (id, original_path, preview_path, kind, dominant_colors, tags, size_bytes, file_name, extension, last_modified_os, width, height, created_at, content_snippet, is_broken, file_hash)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            "UPDATE assets SET 
+                preview_path = ?1, 
+                dominant_colors = ?2, 
+                tags = ?3, 
+                size_bytes = ?4, 
+                file_name = ?5, 
+                extension = ?6, 
+                last_modified_os = ?7, 
+                width = ?8, 
+                height = ?9, 
+                is_broken = ?10, 
+                file_hash = ?11 
+             WHERE id = ?12",
             params![
-                a.id, a.original_path, a.preview_path, format!("{:?}", a.kind),
-                color_json, tags_json, a.metadata.size_bytes, a.metadata.file_name,
-                a.metadata.extension, a.metadata.last_modified_os, a.width, a.height,
-                a.created_at, a.content_snippet, if a.is_broken { 1 } else { 0 },
-                a.file_hash
+                a.preview_path,
+                color_json,
+                tags_json,
+                a.metadata.size_bytes,
+                a.metadata.file_name,
+                a.metadata.extension,
+                a.metadata.last_modified_os,
+                a.width,
+                a.height,
+                if a.is_broken { 1 } else { 0 },
+                a.file_hash,
+                a.id
             ],
         );
     }
     tx.commit().map_err(|e| e.to_string())?;
 
     // Clean up orphaned thumbnail files
-    let thumb_dir = Path::new(&state.config.library_path).join("thumbnails");
+    let thumb_dir = Path::new(&config.library_path).join("thumbnails");
     if thumb_dir.exists() {
         let valid_ids: std::collections::HashSet<String> = {
             let mut stmt = conn.prepare("SELECT id FROM assets").map_err(|e| e.to_string())?;
@@ -695,7 +754,83 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
         }
     }
 
+    let _ = conn.execute("PRAGMA optimize", ());
+
     Ok(())
+}
+
+#[tauri::command]
+async fn regenerate_thumbnails(state: State<'_, AppState>) -> Result<usize, String> {
+    let config = state.config();
+    let thumb_dir = Path::new(&config.library_path).join("thumbnails");
+    let _ = fs::create_dir_all(&thumb_dir);
+
+    // 1. Clear out existing thumbnails directory
+    if let Ok(entries) = fs::read_dir(&thumb_dir) {
+        for entry in entries.flatten() {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+
+    // 2. Fetch all non-broken image and video assets
+    let assets: Vec<(String, String, AssetKind)> = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare("SELECT id, original_path, kind FROM assets WHERE is_broken = 0").map_err(|e| e.to_string())?;
+        let items = stmt.query_map((), |row| {
+            let id: String = row.get(0)?;
+            let path: String = row.get(1)?;
+            let kind_str: String = row.get(2)?;
+            let kind = match kind_str.as_str() {
+                "Image" => AssetKind::Image,
+                "Video" => AssetKind::Video,
+                "Text" => AssetKind::Text,
+                "Code" => AssetKind::Code,
+                _ => AssetKind::Unknown,
+            };
+            Ok((id, path, kind))
+        }).map_err(|e| e.to_string())?;
+        items.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+    };
+
+    // 3. Rebuild thumbnails in spawn_blocking
+    let regenerated = tokio::task::spawn_blocking(move || {
+        let mut updates = Vec::new();
+        for (id, orig_path_str, kind) in assets {
+            let orig_path = Path::new(&orig_path_str);
+            if !orig_path.exists() {
+                continue;
+            }
+            if kind == AssetKind::Image {
+                if let Ok(img) = image::open(orig_path) {
+                    if let Some(new_thumb) = save_thumbnail(&img, &id, &config) {
+                        updates.push((id, new_thumb));
+                    }
+                }
+            } else if kind == AssetKind::Video {
+                if let Some(new_thumb) = generate_video_thumbnail(orig_path, &id, &config) {
+                    updates.push((id, new_thumb));
+                }
+            }
+        }
+        updates
+    })
+    .await
+    .map_err(|e| format!("Regenerate thumbnails panicked: {}", e))?;
+
+    let count = regenerated.len();
+
+    // 4. Update database records
+    let mut conn = state.db.lock().map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    for (id, thumb_path) in regenerated {
+        let _ = tx.execute(
+            "UPDATE assets SET preview_path = ?1 WHERE id = ?2",
+            params![thumb_path, id],
+        );
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+
+    Ok(count)
 }
 
 #[tauri::command]
@@ -960,7 +1095,7 @@ async fn undo_last_operation(
     state: State<'_, AppState>,
     op_id: Option<String>,
 ) -> Result<UndoResult, String> {
-    let config = state.config.clone();
+    let config = state.config();
     let conn = state.db.lock().map_err(|e| e.to_string())?;
 
     let row = if let Some(ref id) = op_id {
@@ -1126,17 +1261,19 @@ fn calculate_dir_size(path: &Path) -> u64 {
 
 #[tauri::command]
 async fn get_library_info(state: State<'_, AppState>) -> Result<LibraryInfo, String> {
-    let lib_path = PathBuf::from(&state.config.library_path);
+    let config = state.config();
+    let lib_path = PathBuf::from(&config.library_path);
     let size_bytes = calculate_dir_size(&lib_path);
     Ok(LibraryInfo {
-        path: state.config.library_path.clone(),
+        path: config.library_path,
         size_bytes,
     })
 }
 
 #[tauri::command]
 async fn open_library_folder(state: State<'_, AppState>) -> Result<(), String> {
-    let path = &state.config.library_path;
+    let config = state.config();
+    let path = &config.library_path;
     #[cfg(target_os = "windows")]
     std::process::Command::new("explorer")
         .arg(path)
@@ -1249,13 +1386,14 @@ async fn clear_library(state: State<'_, AppState>) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM assets", ()).map_err(|e| e.to_string())?;
 
-    let thumbnails_dir = Path::new(&state.config.library_path).join("thumbnails");
+    let config = state.config();
+    let thumbnails_dir = Path::new(&config.library_path).join("thumbnails");
     if thumbnails_dir.exists() {
         let _ = fs::remove_dir_all(&thumbnails_dir);
         let _ = fs::create_dir_all(&thumbnails_dir);
     }
 
-    let local_dir = Path::new(&state.config.library_path).join("local");
+    let local_dir = Path::new(&config.library_path).join("local");
     if local_dir.exists() {
         let _ = fs::remove_dir_all(&local_dir);
         let _ = fs::create_dir_all(&local_dir);
@@ -1266,7 +1404,8 @@ async fn clear_library(state: State<'_, AppState>) -> Result<(), String> {
 
 #[tauri::command]
 async fn save_settings(window: tauri::Window, state: State<'_, AppState>, settings: String) -> Result<(), String> {
-    let settings_path = Path::new(&state.config.library_path).join("settings.json");
+    let lib_path = state.config().library_path;
+    let settings_path = Path::new(&lib_path).join("settings.json");
     let mut settings_json: serde_json::Value = serde_json::from_str(&settings).unwrap_or_else(|_| serde_json::json!({}));
     if let (Ok(pos), Ok(size)) = (window.outer_position(), window.outer_size()) {
         settings_json["windowX"] = serde_json::Value::from(pos.x);
@@ -1274,13 +1413,23 @@ async fn save_settings(window: tauri::Window, state: State<'_, AppState>, settin
         settings_json["windowWidth"] = serde_json::Value::from(size.width);
         settings_json["windowHeight"] = serde_json::Value::from(size.height);
     }
+
+    // Update in-memory AppConfig live
+    if let Some(thumb_sz) = settings_json.get("thumbnailSize").and_then(|v| v.as_u64()) {
+        state.config.lock().unwrap().thumbnail_size = thumb_sz as u32;
+    }
+    if let Some(gpu_accel) = settings_json.get("gpuAcceleration").and_then(|v| v.as_bool()) {
+        state.config.lock().unwrap().gpu_acceleration = gpu_accel;
+    }
+
     let updated_str = serde_json::to_string_pretty(&settings_json).map_err(|e| e.to_string())?;
     fs::write(settings_path, updated_str).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn load_settings(state: State<'_, AppState>) -> Result<String, String> {
-    let settings_path = Path::new(&state.config.library_path).join("settings.json");
+    let lib_path = state.config().library_path;
+    let settings_path = Path::new(&lib_path).join("settings.json");
     if !settings_path.exists() {
         return Ok("{}".to_string());
     }
@@ -1295,7 +1444,7 @@ pub fn run() {
             let db = init_db(&config)?;
             let clipboard = Clipboard::new().map_err(|e| e.to_string())?;
             app.manage(AppState {
-                config: config.clone(),
+                config: Mutex::new(config.clone()),
                 db: Mutex::new(db),
                 clipboard: Mutex::new(clipboard),
             });
@@ -1382,6 +1531,7 @@ pub fn run() {
             processing::expand_directory,
             get_library_info,
             open_library_folder,
+            regenerate_thumbnails,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

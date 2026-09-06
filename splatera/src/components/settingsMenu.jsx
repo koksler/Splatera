@@ -7,7 +7,8 @@ import {
   CakeSlice,
   Rabbit,
   Package,
-  SquareArrowOutUpRight
+  SquareArrowOutUpRight,
+  RefreshCw
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import Button from './button';
@@ -30,7 +31,6 @@ const CATEGORIES = [
 ];
 
 export default function SettingsMenu({
-
   viewMode,
   setViewMode,
   pillHeader,
@@ -41,6 +41,14 @@ export default function SettingsMenu({
   onRangeValChange,
   autoplay,
   onAutoplayChange,
+  thumbnailSize = 400,
+  onThumbnailSizeChange,
+  disableBlur = false,
+  onDisableBlurChange,
+  batchSize = 30,
+  onBatchSizeChange,
+  gpuAcceleration = true,
+  onGpuAccelerationChange,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState('appearance');
@@ -94,6 +102,32 @@ export default function SettingsMenu({
       console.error("Error on BD recalc:", error);
       window.dispatchEvent(new CustomEvent('show-notification', {
         detail: { title: 'Optimization Failed', desc: 'Could not optimize the database.' }
+      }));
+    }
+  };
+
+  const handleRegenerateThumbnails = async () => {
+    try {
+      setIsOpen(false);
+      window.dispatchEvent(new CustomEvent('show-notification', {
+        detail: {
+          title: 'Regenerating Thumbnails...',
+          desc: 'Clearing cache and generating new previews...',
+          progress: 50,
+          duration: 60000
+        }
+      }));
+
+      const count = await invoke('regenerate_thumbnails');
+
+      window.dispatchEvent(new CustomEvent('reload-library'));
+      window.dispatchEvent(new CustomEvent('show-notification', {
+        detail: { title: 'Thumbnails Regenerated', desc: `Rebuilt previews for ${count} assets.` }
+      }));
+    } catch (error) {
+      console.error("Error regenerating thumbnails:", error);
+      window.dispatchEvent(new CustomEvent('show-notification', {
+        detail: { title: 'Regeneration Failed', desc: 'Could not rebuild thumbnails.' }
       }));
     }
   };
@@ -179,14 +213,70 @@ export default function SettingsMenu({
       )
     },
     {
-      category: 'appearance',
-      group: 'experimental',
+      category: 'performance',
+      group: 'thumbnails',
+      title: 'Thumbnail resolution',
+      description: 'Scale at which thumbnails are generated. Recalculate DB for older assets',
+      control: (
+        <RangeSlider
+          min={200}
+          max={800}
+          ticks={[200, 400, 600, 800]}
+          value={thumbnailSize}
+          onChange={onThumbnailSizeChange}
+          formatTooltip={(v) => `${v}px`}
+        />
+      )
+    },
+    {
+      category: 'performance',
+      group: 'playback',
       title: 'Autoplay all media',
       description: 'It loops all gifs and videos forever. VERY RESOURCE INTENSIVE. And I mean it.',
       control: (
         <Toggle
           checked={autoplay}
           onChange={handleToggleAutoplay}
+        />
+      )
+    },
+    {
+      category: 'performance',
+      group: 'rendering',
+      title: 'Disable blur',
+      description: 'Disables backdrop blur on all components.',
+      control: (
+        <Toggle
+          checked={disableBlur}
+          onChange={onDisableBlurChange}
+        />
+      )
+    },
+    {
+      category: 'performance',
+      group: 'loading',
+      title: 'Items per batch',
+      description: 'Number of items loaded per scroll batch',
+      control: (
+        <RangeSlider
+          min={10}
+          max={100}
+          ticks={[10, 30, 50, 70, 100]}
+          value={batchSize}
+          onChange={onBatchSizeChange}
+          formatTooltip={(v) => `${v} items`}
+        />
+      )
+    },
+    {
+      category: 'performance',
+      group: 'acceleration',
+      title: 'Hardware acceleration',
+      description: 'GPU acceleration for UI rendering and video thumbnail decoding. Requires app restart to apply to UI.',
+      control: (
+        <Toggle
+          checked={gpuAcceleration}
+          onChange={onGpuAccelerationChange}
         />
       )
     },
@@ -233,8 +323,22 @@ export default function SettingsMenu({
     {
       category: 'data and storage',
       group: 'database tools',
+      title: 'Regenerate thumbnails',
+      description: 'Clear the thumbnail cache and rebuild preview images for all assets',
+      control: (
+        <Button
+          icon={RefreshCw}
+          text="Regenerate thumbnails"
+          onClick={handleRegenerateThumbnails}
+          className="settings-action-btn"
+        />
+      )
+    },
+    {
+      category: 'data and storage',
+      group: 'database tools',
       title: 'Recalculate DB',
-      description: 'Optimize database layout, regenerate thumbnails, and verify integrity',
+      description: 'Verify file integrity, update missing metadata and colors, and prune orphaned files',
       control: (
         <Button
           icon={DatabaseZap}

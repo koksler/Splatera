@@ -93,6 +93,10 @@ function App() {
   const [themeMode, setThemeMode] = useState('System');
   const [rangeVal, setRangeVal] = useState(4);
   const [autoplay, setAutoplay] = useState(false);
+  const [thumbnailSize, setThumbnailSize] = useState(400);
+  const [disableBlur, setDisableBlur] = useState(false);
+  const [batchSize, setBatchSize] = useState(30);
+  const [gpuAcceleration, setGpuAcceleration] = useState(true);
   const [tagPreviews, setTagPreviews] = useState([]);
   const settingsRef = useRef({});
   const saveDebounceRef = useRef(null);
@@ -151,7 +155,7 @@ function App() {
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const LIMIT = 30;
+  const LIMIT = batchSize;
 
   const notifTimeout = useRef(null);
   // Undo delete: stores { id, image } for the pending undo window
@@ -307,14 +311,14 @@ function App() {
       }
       setIsLoadingMore(false);
     }
-  }, []);
+  }, [batchSize]);
 
   const loadMore = useCallback(() => {
     if (isLoadingMore || !hasMore) return;
     const nextOffset = offset + LIMIT;
     setOffset(nextOffset);
     loadLibrary(activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder, nextOffset, true);
-  }, [isLoadingMore, hasMore, offset, loadLibrary, activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder]);
+  }, [isLoadingMore, hasMore, offset, loadLibrary, activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder, LIMIT]);
 
   // Debounced library loading — offloads O(N) filtering to Rust.
   // This is the "Magic Sauce" that makes the UI instant and drops RAM usage.
@@ -326,7 +330,7 @@ function App() {
     }, searchQuery || dateFilter ? 150 : 0);
 
     return () => clearTimeout(timer);
-  }, [activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder, refreshTrigger]);
+  }, [activeFilter, searchQuery, selectedTags, selectedColor, dateFilter, sortOrder, refreshTrigger, batchSize]);
 
   // Load tag previews on mount and when library changes
   useEffect(() => {
@@ -484,6 +488,24 @@ function App() {
           if (settings.viewMode !== undefined) {
             setViewMode(settings.viewMode);
           }
+          if (settings.thumbnailSize !== undefined) {
+            const parsed = Number(settings.thumbnailSize);
+            if (!isNaN(parsed) && [200, 400, 600, 800].includes(parsed)) {
+              setThumbnailSize(parsed);
+            }
+          }
+          if (settings.disableBlur !== undefined) {
+            setDisableBlur(Boolean(settings.disableBlur));
+          }
+          if (settings.batchSize !== undefined) {
+            const parsed = Number(settings.batchSize);
+            if (!isNaN(parsed) && [10, 30, 50, 70, 100].includes(parsed)) {
+              setBatchSize(parsed);
+            }
+          }
+          if (settings.gpuAcceleration !== undefined) {
+            setGpuAcceleration(Boolean(settings.gpuAcceleration));
+          }
         } catch (e) {
           console.error("Failed to parse settings.json", e);
         }
@@ -557,6 +579,10 @@ function App() {
       if (notifTimeout.current) clearTimeout(notifTimeout.current);
     };
   }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('no-blur', disableBlur);
+  }, [disableBlur]);
 
   useEffect(() => {
     if (pillHeader) {
@@ -691,6 +717,36 @@ function App() {
     saveAppSetting('viewMode', nextValue);
   };
 
+  const handleThumbnailSizeChange = (nextValue) => {
+    setThumbnailSize(nextValue);
+    settingsRef.current = { ...settingsRef.current, thumbnailSize: nextValue };
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = setTimeout(() => {
+      invoke('save_settings', { settings: JSON.stringify(settingsRef.current) })
+        .catch(err => console.error('Failed to save settings', err));
+    }, 300);
+  };
+
+  const handleDisableBlurChange = (nextValue) => {
+    setDisableBlur(nextValue);
+    saveAppSetting('disableBlur', nextValue);
+  };
+
+  const handleBatchSizeChange = (nextValue) => {
+    setBatchSize(nextValue);
+    settingsRef.current = { ...settingsRef.current, batchSize: nextValue };
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = setTimeout(() => {
+      invoke('save_settings', { settings: JSON.stringify(settingsRef.current) })
+        .catch(err => console.error('Failed to save settings', err));
+    }, 300);
+  };
+
+  const handleGpuAccelerationChange = (nextValue) => {
+    setGpuAcceleration(nextValue);
+    saveAppSetting('gpuAcceleration', nextValue);
+  };
+
   const isSearchActive = searchQuery.trim() !== '' ||
     selectedTags.length > 0 ||
     selectedColor !== null ||
@@ -732,6 +788,14 @@ function App() {
         onRangeValChange={handleRangeValChange}
         autoplay={autoplay}
         onAutoplayChange={handleAutoplayChange}
+        thumbnailSize={thumbnailSize}
+        onThumbnailSizeChange={handleThumbnailSizeChange}
+        disableBlur={disableBlur}
+        onDisableBlurChange={handleDisableBlurChange}
+        batchSize={batchSize}
+        onBatchSizeChange={handleBatchSizeChange}
+        gpuAcceleration={gpuAcceleration}
+        onGpuAccelerationChange={handleGpuAccelerationChange}
       />
 
       <Notification

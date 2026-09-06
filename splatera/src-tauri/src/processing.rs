@@ -307,6 +307,9 @@ pub fn generate_video_thumbnail(
     let thumb_path_str = thumb_path.to_string_lossy();
 
     let mut cmd = Command::new("ffmpeg");
+    if config.gpu_acceleration {
+        cmd.args(&["-hwaccel", "auto"]);
+    }
     cmd.args(&[
         "-i",
         &video_path_str,
@@ -331,7 +334,6 @@ pub fn generate_video_thumbnail(
     }
 }
 
-#[tauri::command]
 pub fn is_temp_path(path: &Path) -> bool {
     let temp = std::env::temp_dir();
     if let (Ok(p), Ok(t)) = (path.canonicalize(), temp.canonicalize()) {
@@ -352,7 +354,7 @@ pub async fn prepare_dropped_paths(
     state: State<'_, AppState>,
     paths: Vec<String>,
 ) -> Result<PrepareResult, String> {
-    let config = state.config.clone();
+    let config = state.config();
     let mut raw_paths = Vec::new();
 
     for p in paths {
@@ -507,7 +509,7 @@ pub async fn copy_to_local_library(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<String, String> {
-    let config = state.config.clone();
+    let config = state.config();
     let src_path = Path::new(&path);
     if !src_path.exists() {
         return Err(format!("Source path does not exist: {}", path));
@@ -562,7 +564,7 @@ pub async fn process_asset(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<Vec<SimplifiedAsset>, String> {
-    let config = state.config.clone();
+    let config = state.config();
 
     let assets = tokio::task::spawn_blocking(move || {
         let root = Path::new(&path);
@@ -621,24 +623,42 @@ pub async fn process_asset(
                     );
                 }
 
-                saved.push(SimplifiedAsset {
-                    id: existing_id,
-                    original_path: a.original_path.clone(),
-                    preview_path: a.preview_path.clone(),
-                    kind: a.kind.clone(),
-                    tags: a.tags.clone(),
-                    file_name: a.metadata.file_name.clone(),
-                    width: a.width,
-                    height: a.height,
-                    created_at: a.created_at,
-                    last_modified_os: a.metadata.last_modified_os,
-                    content_snippet: a
-                        .content_snippet
-                        .as_ref()
-                        .map(|s| s.lines().take(5).collect::<Vec<_>>().join("\n")),
-                    is_broken: false,
-                    file_hash: a.file_hash.clone(),
-                });
+                // Return actual DB row to avoid data desync
+                let db_asset = tx.query_row(
+                    "SELECT id, original_path, preview_path, kind, tags, file_name, width, height, created_at, last_modified_os, content_snippet, is_broken, file_hash FROM assets WHERE id = ?1",
+                    rusqlite::params![existing_id],
+                    |row| {
+                        let kind_str: String = row.get(3)?;
+                        let kind = match kind_str.as_str() {
+                            "Image" => AssetKind::Image,
+                            "Video" => AssetKind::Video,
+                            "Text" => AssetKind::Text,
+                            "Code" => AssetKind::Code,
+                            _ => AssetKind::Unknown,
+                        };
+                        let tags_json: String = row.get(4)?;
+                        let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+                        Ok(SimplifiedAsset {
+                            id: row.get(0)?,
+                            original_path: row.get(1)?,
+                            preview_path: row.get(2)?,
+                            kind,
+                            tags,
+                            file_name: row.get(5)?,
+                            width: row.get(6)?,
+                            height: row.get(7)?,
+                            created_at: row.get(8)?,
+                            last_modified_os: row.get(9)?,
+                            content_snippet: row.get(10)?,
+                            is_broken: row.get::<_, i32>(11)? == 0,
+                            file_hash: row.get(12)?,
+                        })
+                    },
+                );
+
+                if let Ok(asset) = db_asset {
+                    saved.push(asset);
+                }
 
                 duplicate_handled = true;
             }
@@ -784,6 +804,7 @@ mod tests {
             library_path: lib_path,
             theme_mode: "dark".to_string(),
             thumbnail_size: 400,
+            gpu_acceleration: true,
         }
     }
 
