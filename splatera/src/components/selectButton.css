@@ -55,7 +55,13 @@
 /* Minimized state (40x40 icon-only square) */
 .select-btn.minimized {
   width: 40px;
+  min-width: 40px;
+  max-width: 40px;
   height: 40px;
+  min-height: 40px;
+  max-height: 40px;
+  flex: 0 0 40px;
   padding: 0;
   justify-content: center;
+  align-items: center;
 }
