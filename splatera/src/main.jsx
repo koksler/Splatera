@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import "./version";
 
 // Disable built-in browser right-click context menu, except on inputs/textareas
 document.addEventListener('contextmenu', (e) => {
