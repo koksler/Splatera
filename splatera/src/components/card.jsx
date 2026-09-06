@@ -31,6 +31,8 @@ const notify = (title, desc) => {
   window.dispatchEvent(new CustomEvent('show-notification', { detail: { title, desc } }));
 };
 
+const PLACEHOLDER_IMG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'><rect width='1' height='1' fill='%23222222'/></svg>";
+
 export default memo(Card);
 function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSelection }) {
   const videoRef = useRef(null);
@@ -190,8 +192,6 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
         break;
     }
   };
-
-  const PLACEHOLDER_IMG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'><rect width='1' height='1' fill='%23222222'/></svg>";
 
   return (
     <div

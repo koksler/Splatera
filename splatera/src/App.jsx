@@ -11,8 +11,7 @@ import Notification from './components/notification';
 import Lightbox from './components/lightbox';
 import InputModal from './components/inputModal';
 import DropOverlay from './components/dropOverlay';
-import TagManager from './components/tagManager';
-import ImportModal from './components/importModal';
+import AssetModals from './components/AssetModals';
 import ErrorBoundary from './components/errorBoundary';
 import HelpDock from './components/HelpDock';
 import ScrollOverlay from './components/scrollOverlay';
@@ -768,7 +767,6 @@ function App() {
         ) : (
           <LibraryGrid
             items={deferredImages}
-            refreshTrigger={refreshTrigger}
             viewMode={viewMode}
             loadMore={loadMore}
             hasMore={hasMore}
@@ -789,8 +787,9 @@ function App() {
         />
       )}
       {tagData && (
-        <TagManager
-          data={tagData}
+        <AssetModals
+          mode="edit-tags"
+          tagData={tagData}
           onSave={handleSaveTags}
           onClose={() => setTagData(null)}
         />
@@ -805,8 +804,9 @@ function App() {
         />
       )}
       {pendingImport && (
-        <ImportModal
-          paths={pendingImport}
+        <AssetModals
+          mode="import"
+          assets={pendingImport}
           hasTemp={importHasTemp}
           onConfirm={handleConfirmImport}
           onClose={() => {
@@ -828,8 +828,6 @@ function App() {
   );
 
 }
-
-// ─── Justified layout positioner ─────────────────────────────────────────────
 
 // ─── Vertical Masonry layout positioner ──────────────────────────────────────
 
@@ -980,7 +978,7 @@ const useJustifiedPositioner = ({ width, items = [], gutter = 20, targetHeight =
 
 // ─── LibraryGrid ─────────────────────────────────────────────────────────────
 
-const LibraryGrid = memo(({ items, refreshTrigger, viewMode, loadMore, hasMore, onOpenLightbox, selectedAssetIds, onToggleSelect, rangeVal }) => {
+const LibraryGrid = memo(({ items, viewMode, loadMore, hasMore, onOpenLightbox, selectedAssetIds, onToggleSelect, rangeVal }) => {
   const containerRef = useRef(null);
   const resizeTimer = useRef(null);
   const loaderRef = useRef(null);

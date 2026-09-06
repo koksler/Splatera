@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowUpDown } from 'lucide-react'; // Icon for sort button
+import { ArrowUpDown } from 'lucide-react';
 import {
   useFloating,
   autoUpdate,
