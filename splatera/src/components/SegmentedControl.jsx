@@ -17,14 +17,25 @@ export default function SegmentedControl({
   const itemRefs = useRef([]);
 
   useEffect(() => {
-    const activeItem = itemRefs.current[activeIndex];
-    if (activeItem) {
-      setIndicatorStyle({
-        left: `${activeItem.offsetLeft}px`,
-        width: `${activeItem.offsetWidth}px`,
-      });
+    itemRefs.current = itemRefs.current.slice(0, options.length);
+    const updateIndicator = () => {
+      const activeItem = itemRefs.current[activeIndex];
+      if (activeItem) {
+        setIndicatorStyle({
+          left: `${activeItem.offsetLeft}px`,
+          width: `${activeItem.offsetWidth}px`,
+        });
+      }
+    };
+
+    updateIndicator();
+
+    if (containerRef.current && typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(updateIndicator);
+      ro.observe(containerRef.current);
+      return () => ro.disconnect();
     }
-  }, [activeIndex, options]);
+  }, [activeIndex, options, value]);
 
   const handleSelect = (optVal) => {
     if (onChange) {
