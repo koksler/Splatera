@@ -11,6 +11,7 @@ import Notification from './components/notification';
 import Lightbox from './components/lightbox';
 import InputModal from './components/inputModal';
 import RelocateModal from './components/relocateModal';
+import ConfirmationModal from './components/confirmationModal';
 import DropOverlay from './components/dropOverlay';
 import AssetModals from './components/AssetModals';
 import ErrorBoundary from './components/errorBoundary';
@@ -87,6 +88,7 @@ function App() {
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const [renameData, setRenameData] = useState(null);
   const [relocateData, setRelocateData] = useState(null);
+  const [deleteDeviceTarget, setDeleteDeviceTarget] = useState(null);
   const [pendingImport, setPendingImport] = useState(null);
   const [importHasTemp, setImportHasTemp] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -386,6 +388,25 @@ function App() {
     setRelocateData(null);
   };
 
+  const handleConfirmDeleteDevice = async () => {
+    if (!deleteDeviceTarget) return;
+    const target = deleteDeviceTarget;
+    console.log('[DeleteDeviceModal] Confirmed deletion from device for:', { id: target.id, name: target.file_name || target.name, path: target.path });
+    setDeleteDeviceTarget(null);
+    try {
+      console.log('[DeleteDeviceModal] Calling invoke("delete_asset_device", ...)...');
+      const res = await invoke('delete_asset_device', { id: target.id });
+      console.log('[DeleteDeviceModal] Backend response:', res);
+      setImages(prev => prev.filter(img => img.id !== target.id));
+      undoRef.current = null;
+      showTemporaryNotif('Deleted from Device', 'Asset has been moved to the trash bin.', { duration: 3500 });
+    } catch (err) {
+      console.error('[DeleteDeviceModal] Failed to delete from device:', err);
+      setRefreshTrigger(prev => prev + 1);
+      showTemporaryNotif('Delete Failed', `Could not delete "${target.file_name || target.name}" from device.`);
+    }
+  };
+
   const handleSaveTags = async (target, updatedTags) => {
     try {
       const idsToUpdate = target?.isBatch
@@ -550,6 +571,10 @@ function App() {
     const handleReload = () => setRefreshTrigger(prev => prev + 1);
     const handleRenameModal = (e) => setRenameData(e.detail);
     const handleTagModal = (e) => setTagData(e.detail);
+    const handleDeleteDeviceModal = (e) => {
+      console.log('[DeleteDeviceModal] Received open-delete-device-modal event with asset:', e.detail);
+      setDeleteDeviceTarget(e.detail);
+    };
     const handleOpenLightbox = (e) => {
       const idx = imagesRef.current.findIndex(img => img.id === e.detail.id);
       setLightboxIndex(idx >= 0 ? idx : 0);
@@ -614,6 +639,7 @@ function App() {
     window.addEventListener('reload-library', handleReload);
     window.addEventListener('open-rename-modal', handleRenameModal);
     window.addEventListener('open-tag-modal', handleTagModal);
+    window.addEventListener('open-delete-device-modal', handleDeleteDeviceModal);
     window.addEventListener('open-lightbox', handleOpenLightbox);
     window.addEventListener('show-notification', handleGlobalNotif);
     window.addEventListener('import-files', handleImportFiles);
@@ -648,6 +674,7 @@ function App() {
       window.removeEventListener('reload-library', handleReload);
       window.removeEventListener('open-rename-modal', handleRenameModal);
       window.removeEventListener('open-tag-modal', handleTagModal);
+      window.removeEventListener('open-delete-device-modal', handleDeleteDeviceModal);
       window.removeEventListener('open-lightbox', handleOpenLightbox);
       window.removeEventListener('show-notification', handleGlobalNotif);
       window.removeEventListener('import-files', handleImportFiles);
@@ -939,6 +966,22 @@ function App() {
           onCancel={() => setRelocateData(null)}
         />
       )}
+      <ConfirmationModal
+        isOpen={Boolean(deleteDeviceTarget)}
+        title="Delete from device?"
+        description={
+          <span>
+            Are you sure you want to delete <span className="text-red">"{deleteDeviceTarget?.file_name || deleteDeviceTarget?.name}"</span>? It will be moved to the Trash / Recycle Bin.
+          </span>
+        }
+        confirmText="Proceed"
+        cancelText="Cancel"
+        onConfirm={handleConfirmDeleteDevice}
+        onCancel={() => {
+          console.log('[DeleteDeviceModal] User cancelled deletion.');
+          setDeleteDeviceTarget(null);
+        }}
+      />
       {tagData && (
         <AssetModals
           mode="edit-tags"

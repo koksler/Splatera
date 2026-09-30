@@ -1247,6 +1247,7 @@ async fn delete_asset(state: State<'_, AppState>, id: String) -> Result<String, 
 
 #[tauri::command]
 async fn delete_asset_device(state: State<'_, AppState>, id: String) -> Result<String, String> {
+    println!("[delete_asset_device] Received request to delete asset with id: '{}'", id);
     let conn = state.db.lock().map_err(|e| e.to_string())?;
 
     let asset_data = conn.query_row(
@@ -1273,12 +1274,22 @@ async fn delete_asset_device(state: State<'_, AppState>, id: String) -> Result<S
                 deleted_from_device: true,
             })
         },
-    ).map_err(|e| format!("Asset not found: {}", e))?;
+    ).map_err(|e| {
+        println!("[delete_asset_device] Error looking up asset '{}': {}", id, e);
+        format!("Asset not found: {}", e)
+    })?;
+
+    println!(
+        "[delete_asset_device] Found asset: '{}' (path: '{}')",
+        asset_data.file_name.as_deref().unwrap_or("unknown"),
+        asset_data.original_path
+    );
 
     // Remove preview thumbnail
     if let Some(ref path) = asset_data.preview_path {
         let p = Path::new(path);
         if p.exists() {
+            println!("[delete_asset_device] Removing preview thumbnail at: '{:?}'", p);
             let _ = fs::remove_file(p);
         }
     }
@@ -1286,6 +1297,7 @@ async fn delete_asset_device(state: State<'_, AppState>, id: String) -> Result<S
     // Move original file to OS Trash Bin / Recycle Bin
     let orig_path = Path::new(&asset_data.original_path);
     if orig_path.exists() {
+        println!("[delete_asset_device] File exists on disk. Attempting trash::delete for: '{:?}'", orig_path);
         if let Ok(meta) = fs::metadata(orig_path) {
             let mut perms = meta.permissions();
             if perms.readonly() {
@@ -1294,17 +1306,27 @@ async fn delete_asset_device(state: State<'_, AppState>, id: String) -> Result<S
             }
         }
         if let Err(e) = trash::delete(orig_path) {
-            println!("trash::delete failed ({}), falling back to remove_file", e);
+            println!("[delete_asset_device] trash::delete failed ({}), falling back to remove_file", e);
             std::thread::sleep(std::time::Duration::from_millis(100));
             if let Err(retry_err) = fs::remove_file(orig_path) {
-                println!("Failed to remove file from device: {}", retry_err);
+                println!("[delete_asset_device] Failed to remove file from device: {}", retry_err);
                 return Err(format!("Could not move file to trash: {}", retry_err));
             }
+            println!("[delete_asset_device] File successfully removed via fs::remove_file fallback.");
+        } else {
+            println!("[delete_asset_device] File successfully moved to OS trash.");
         }
+    } else {
+        println!("[delete_asset_device] File does NOT exist on disk at '{:?}' (broken/missing link). Skipping filesystem removal.", orig_path);
     }
 
     conn.execute("DELETE FROM assets WHERE id = ?1", params![id])
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            println!("[delete_asset_device] Error deleting DB record for '{}': {}", id, e);
+            e.to_string()
+        })?;
+
+    println!("[delete_asset_device] Asset '{}' successfully deleted from database and device.", id);
 
     Ok("deleted".to_string())
 }

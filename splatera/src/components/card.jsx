@@ -182,14 +182,8 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
         }
         break;
       case 'delete_device':
-        try {
-          const opId = await invoke('delete_asset_device', { id: data.id });
-          window.dispatchEvent(new CustomEvent('optimistic-delete', { detail: { id: data.id, image: data, opId, isDevice: true } }));
-        } catch (err) {
-          console.error('Failed to delete from device:', err);
-          window.dispatchEvent(new CustomEvent('reload-library'));
-          notify('Delete Failed', `Could not delete "${data.name}" from device.`);
-        }
+        console.log('[Card] "Delete from device" triggered for asset:', { id: data.id, name: data.name, path: data.path });
+        window.dispatchEvent(new CustomEvent('open-delete-device-modal', { detail: data }));
         break;
       default:
         break;

@@ -8,6 +8,7 @@ export default function ConfirmationModal({
   title = "Are you sure?",
   description,
   confirmText = "Delete",
+  confirmIcon = Trash2,
   cancelText = "Cancel",
   thirdActionText,
   onConfirm,
@@ -50,7 +51,7 @@ export default function ConfirmationModal({
             className="confirmation-modal-btn"
           />
           <Button
-            icon={Trash2}
+            icon={confirmIcon || Trash2}
             text={confirmText}
             onClick={onConfirm}
             className="confirmation-modal-btn"
