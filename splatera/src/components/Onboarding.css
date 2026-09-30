@@ -1,0 +1,208 @@
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: url('/bg-1080p.png') no-repeat center center fixed;
+  background-size: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px;
+  box-sizing: border-box;
+}
+
+.onboarding-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 580px;
+  max-height: calc(100vh - 40px);
+  box-sizing: border-box;
+}
+
+/* 1. Header Component */
+.onboarding-header {
+  height: 80px;
+  min-height: 80px;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  box-sizing: border-box;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.onboarding-logo {
+  height: 32px;
+  width: auto;
+  display: block;
+}
+
+.onboarding-header .window-controls {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+/* 2. Main Body Component */
+.onboarding-body {
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 24px;
+  box-sizing: border-box;
+  width: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Custom scrollbar for onboarding body */
+.onboarding-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.onboarding-body::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 9999px;
+}
+
+.onboarding-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Greeting title */
+.onboarding-greeting {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-text-button);
+  line-height: 1.25;
+  letter-spacing: -0.5px;
+  text-transform: lowercase;
+  user-select: none;
+}
+
+/* Setting Controls */
+.onboarding-wrapper .setting-row {
+  padding: 18px 20px;
+}
+
+.onboarding-select {
+  min-width: 130px;
+}
+
+.onboarding-segmented {
+  min-width: 180px;
+}
+
+/* Separate path input & browse button (Screenshot 2) */
+.onboarding-path-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 220px;
+}
+
+.onboarding-path-field {
+  flex: 1;
+  min-width: 160px;
+}
+
+.onboarding-browse-btn {
+  flex-shrink: 0;
+}
+
+/* Action button area */
+.onboarding-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 4px;
+  width: 100%;
+}
+
+.onboarding-finish-btn {
+  width: 100%;
+  height: 40px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-button);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.onboarding-finish-btn:hover {
+  border-color: var(--color-text-secondary);
+  filter: brightness(1.2);
+}
+
+.onboarding-finish-btn:active {
+  filter: brightness(1.4);
+}
+
+.onboarding-finish-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Responsive Narrow Screen layout (matches left design in screenshot) */
+@media (max-width: 540px) {
+  .onboarding-overlay {
+    padding: 12px 10px;
+  }
+
+  .onboarding-wrapper {
+    max-height: calc(100vh - 24px);
+    gap: 12px;
+  }
+
+  .onboarding-header {
+    height: 72px;
+    min-height: 72px;
+    padding: 0 16px;
+  }
+
+  .onboarding-body {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .onboarding-wrapper .setting-row {
+    padding: 14px 12px;
+    gap: 10px;
+  }
+
+  .onboarding-wrapper .setting-row-left {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .onboarding-wrapper .setting-row-right {
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    justify-content: flex-start;
+  }
+
+  .onboarding-wrapper .onboarding-select,
+  .onboarding-wrapper .onboarding-segmented,
+  .onboarding-wrapper .onboarding-path-group {
+    width: 100%;
+  }
+}

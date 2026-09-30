@@ -173,6 +173,7 @@ pub fn locate_moved_file(
     original_path: &Path,
     expected_hash: Option<&str>,
     library_path: &Path,
+    custom_local_path: Option<&Path>,
 ) -> Option<PathBuf> {
     if original_path.exists() {
         return Some(original_path.to_path_buf());
@@ -238,6 +239,22 @@ pub fn locate_moved_file(
             }
         } else {
             return Some(local_file);
+        }
+    }
+
+    // 3. Check custom local storage path if configured
+    if let Some(custom_base) = custom_local_path {
+        let custom_file = custom_base.join(&target_ext).join(target_file_name);
+        if custom_file.exists() && custom_file.is_file() {
+            if let Some(expected) = expected_hash {
+                if let Ok(h) = compute_file_hash(&custom_file) {
+                    if h == expected {
+                        return Some(custom_file);
+                    }
+                }
+            } else {
+                return Some(custom_file);
+            }
         }
     }
 
@@ -462,7 +479,12 @@ pub async fn prepare_dropped_paths(
                 .map(|e| e.to_string_lossy().to_lowercase())
                 .unwrap_or_else(|| "_".to_string());
 
-            let local_dir = Path::new(&config.library_path).join("local").join(&ext);
+            let local_base = if let Some(ref custom_path) = config.local_storage_path {
+                PathBuf::from(custom_path)
+            } else {
+                Path::new(&config.library_path).join("local")
+            };
+            let local_dir = local_base.join(&ext);
             if let Err(e) = fs::create_dir_all(&local_dir) {
                 println!("Failed to create local dir for temp: {}", e);
                 result.push(p);
@@ -595,7 +617,12 @@ pub async fn copy_to_local_library(
         .map(|e| e.to_string_lossy().to_lowercase())
         .unwrap_or_else(|| "_".to_string());
 
-    let local_dir = Path::new(&config.library_path).join("local").join(&ext);
+    let local_base = if let Some(ref custom_path) = config.local_storage_path {
+        PathBuf::from(custom_path)
+    } else {
+        Path::new(&config.library_path).join("local")
+    };
+    let local_dir = local_base.join(&ext);
     if src_path.starts_with(&local_dir) {
         return Ok(path);
     }

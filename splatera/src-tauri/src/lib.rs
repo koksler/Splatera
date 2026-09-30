@@ -81,6 +81,24 @@ pub struct AppConfig {
     pub theme_mode: String,
     pub thumbnail_size: u32,
     pub gpu_acceleration: bool,
+    pub local_storage_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OnboardingStatus {
+    pub needs_onboarding: bool,
+    pub default_portable_path: String,
+    pub default_standard_path: String,
+    pub default_local_portable: String,
+    pub default_local_standard: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompleteOnboardingPayload {
+    pub theme_mode: String,
+    pub setup_mode: String,
+    pub masonry_type: String,
+    pub local_storage_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,42 +113,61 @@ struct LibraryQuery {
     offset: Option<u32>,
 }
 
-fn get_config(app: &tauri::AppHandle) -> Result<AppConfig, String> {
+pub fn get_library_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String> {
     #[cfg(target_os = "linux")]
-    let lib_path = {
+    {
         let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-        app_dir.join(".splatera_library")
-    };
+        Ok((app_dir.join(".splatera_library"), app_dir.join(".splatera_library")))
+    }
 
     #[cfg(not(target_os = "linux"))]
-    let lib_path = {
+    {
         let exe_path = env::current_exe().map_err(|e| e.to_string())?;
         let exe_dir = exe_path.parent().ok_or("Cannot determine exe directory")?;
-        let portable_flag = exe_dir.join("portable.txt");
+        let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+        Ok((exe_dir.join(".splatera_library"), app_dir.join(".splatera_library")))
+    }
+}
 
-        if portable_flag.exists() {
-            exe_dir.join(".splatera_library")
-        } else {
-            let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-            app_dir.join(".splatera_library")
-        }
+fn get_config(app: &tauri::AppHandle) -> Result<(AppConfig, bool), String> {
+    let (portable_lib, standard_lib) = get_library_paths(app)?;
+
+    let (lib_path, is_onboarded) = if portable_lib.exists() {
+        (portable_lib, true)
+    } else if standard_lib.exists() {
+        (standard_lib, true)
+    } else {
+        (standard_lib, false)
     };
 
-    fs::create_dir_all(&lib_path).unwrap_or_default();
-    fs::create_dir_all(lib_path.join("thumbnails")).unwrap_or_default();
-    fs::create_dir_all(lib_path.join("local")).unwrap_or_default();
-
-    let settings_file = lib_path.join("settings.json");
     let mut thumb_size = 400;
     let mut gpu_accel = true;
-    if settings_file.exists() {
-        if let Ok(content) = fs::read_to_string(&settings_file) {
-            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-                if let Some(ts) = val.get("thumbnailSize").and_then(|v| v.as_u64()) {
-                    thumb_size = ts as u32;
-                }
-                if let Some(ga) = val.get("gpuAcceleration").and_then(|v| v.as_bool()) {
-                    gpu_accel = ga;
+    let mut theme_mode = "dark".to_string();
+    let mut local_storage = None;
+
+    if is_onboarded {
+        fs::create_dir_all(&lib_path).unwrap_or_default();
+        fs::create_dir_all(lib_path.join("thumbnails")).unwrap_or_default();
+        fs::create_dir_all(lib_path.join("local")).unwrap_or_default();
+
+        let settings_file = lib_path.join("settings.json");
+        if settings_file.exists() {
+            if let Ok(content) = fs::read_to_string(&settings_file) {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(ts) = val.get("thumbnailSize").and_then(|v| v.as_u64()) {
+                        thumb_size = ts as u32;
+                    }
+                    if let Some(ga) = val.get("gpuAcceleration").and_then(|v| v.as_bool()) {
+                        gpu_accel = ga;
+                    }
+                    if let Some(tm) = val.get("themeMode").and_then(|v| v.as_str()) {
+                        theme_mode = tm.to_string();
+                    }
+                    if let Some(lsp) = val.get("localStoragePath").and_then(|v| v.as_str()) {
+                        if !lsp.trim().is_empty() {
+                            local_storage = Some(lsp.trim().to_string());
+                        }
+                    }
                 }
             }
         }
@@ -141,12 +178,16 @@ fn get_config(app: &tauri::AppHandle) -> Result<AppConfig, String> {
         std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu --disable-gpu-compositing");
     }
 
-    Ok(AppConfig {
-        library_path: lib_path.to_string_lossy().into_owned(),
-        theme_mode: "dark".to_string(),
-        thumbnail_size: thumb_size,
-        gpu_acceleration: gpu_accel,
-    })
+    Ok((
+        AppConfig {
+            library_path: lib_path.to_string_lossy().into_owned(),
+            theme_mode,
+            thumbnail_size: thumb_size,
+            gpu_acceleration: gpu_accel,
+            local_storage_path: local_storage,
+        },
+        is_onboarded,
+    ))
 }
 
 pub struct AppState {
@@ -165,10 +206,7 @@ fn get_db_path(config: &AppConfig) -> PathBuf {
     Path::new(&config.library_path).join("database.db")
 }
 
-fn init_db(config: &AppConfig) -> Result<Connection, String> {
-    let db_path = get_db_path(config);
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-
+fn setup_db_tables(conn: &Connection) -> Result<(), String> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS assets (
             id TEXT PRIMARY KEY,
@@ -211,6 +249,13 @@ fn init_db(config: &AppConfig) -> Result<Connection, String> {
         (),
     );
 
+    Ok(())
+}
+
+fn init_db(config: &AppConfig) -> Result<Connection, String> {
+    let db_path = get_db_path(config);
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    setup_db_tables(&conn)?;
     Ok(conn)
 }
 
@@ -658,7 +703,8 @@ async fn regenerate_asset(
     } else {
         let p = PathBuf::from(&old_orig_path);
         if !p.exists() {
-            if let Some(found) = locate_moved_file(&p, file_hash.as_deref(), Path::new(&config.library_path)) {
+            let custom_local = config.local_storage_path.as_deref().map(Path::new);
+            if let Some(found) = locate_moved_file(&p, file_hash.as_deref(), Path::new(&config.library_path), custom_local) {
                 relocated = true;
                 found
             } else {
@@ -869,7 +915,8 @@ async fn recalculate_db(app: tauri::AppHandle, state: State<'_, AppState>) -> Re
             let mut was_relocated = false;
 
             if !orig_path.exists() {
-                if let Some(found) = locate_moved_file(&orig_path, a.file_hash.as_deref(), Path::new(&config_clone.library_path)) {
+                let custom_local = config_clone.local_storage_path.as_deref().map(Path::new);
+                if let Some(found) = locate_moved_file(&orig_path, a.file_hash.as_deref(), Path::new(&config_clone.library_path), custom_local) {
                     a.original_path = found.to_string_lossy().into_owned();
                     orig_path = found;
                     a.is_broken = false;
@@ -1744,6 +1791,13 @@ async fn save_settings(window: tauri::Window, state: State<'_, AppState>, settin
     if let Some(gpu_accel) = settings_json.get("gpuAcceleration").and_then(|v| v.as_bool()) {
         state.config.lock().unwrap().gpu_acceleration = gpu_accel;
     }
+    if let Some(lsp) = settings_json.get("localStoragePath").and_then(|v| v.as_str()) {
+        state.config.lock().unwrap().local_storage_path = if !lsp.trim().is_empty() {
+            Some(lsp.trim().to_string())
+        } else {
+            None
+        };
+    }
 
     let updated_str = serde_json::to_string_pretty(&settings_json).map_err(|e| e.to_string())?;
     fs::write(settings_path, updated_str).map_err(|e| e.to_string())
@@ -1759,12 +1813,113 @@ async fn load_settings(state: State<'_, AppState>) -> Result<String, String> {
     fs::read_to_string(settings_path).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn check_onboarding_status(app: tauri::AppHandle) -> Result<OnboardingStatus, String> {
+    let (portable_lib, standard_lib) = get_library_paths(&app)?;
+    let needs_onboarding = !portable_lib.exists() && !standard_lib.exists();
+
+    Ok(OnboardingStatus {
+        needs_onboarding,
+        default_portable_path: portable_lib.to_string_lossy().to_string(),
+        default_standard_path: standard_lib.to_string_lossy().to_string(),
+        default_local_portable: portable_lib.join("local").to_string_lossy().to_string(),
+        default_local_standard: standard_lib.join("local").to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+async fn complete_onboarding(
+    payload: CompleteOnboardingPayload,
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let app_handle = window.app_handle();
+    let (portable_lib, standard_lib) = get_library_paths(&app_handle)?;
+
+    let target_lib = if payload.setup_mode.to_lowercase() == "portable" {
+        portable_lib
+    } else {
+        standard_lib
+    };
+
+    fs::create_dir_all(&target_lib).map_err(|e| e.to_string())?;
+    fs::create_dir_all(target_lib.join("thumbnails")).map_err(|e| e.to_string())?;
+
+    let local_storage_dir = match &payload.local_storage_path {
+        Some(p) if !p.trim().is_empty() => PathBuf::from(p.trim()),
+        _ => target_lib.join("local"),
+    };
+    fs::create_dir_all(&local_storage_dir).map_err(|e| e.to_string())?;
+
+    let view_mode = if payload.masonry_type.to_lowercase() == "horizontal" {
+        "horizontal"
+    } else {
+        "grid"
+    };
+
+    let new_config = AppConfig {
+        library_path: target_lib.to_string_lossy().into_owned(),
+        theme_mode: payload.theme_mode.clone(),
+        thumbnail_size: 400,
+        gpu_acceleration: true,
+        local_storage_path: payload.local_storage_path.as_ref().and_then(|p| {
+            if p.trim().is_empty() {
+                None
+            } else {
+                Some(p.trim().to_string())
+            }
+        }),
+    };
+
+    let real_conn = init_db(&new_config)?;
+
+    {
+        let mut db_guard = state.db.lock().map_err(|e| e.to_string())?;
+        *db_guard = real_conn;
+    }
+    {
+        let mut cfg_guard = state.config.lock().map_err(|e| e.to_string())?;
+        *cfg_guard = new_config;
+    }
+
+    let settings_path = target_lib.join("settings.json");
+    let mut settings_json = serde_json::json!({
+        "themeMode": payload.theme_mode,
+        "viewMode": view_mode,
+        "setupMode": payload.setup_mode,
+        "localStoragePath": local_storage_dir.to_string_lossy(),
+        "thumbnailSize": 400,
+        "rangeVal": 4,
+        "autoplay": false,
+        "pillHeader": true,
+        "disableBlur": false,
+        "batchSize": 30,
+        "gpuAcceleration": true,
+    });
+    if let (Ok(pos), Ok(size)) = (window.outer_position(), window.outer_size()) {
+        settings_json["windowX"] = serde_json::Value::from(pos.x);
+        settings_json["windowY"] = serde_json::Value::from(pos.y);
+        settings_json["windowWidth"] = serde_json::Value::from(size.width);
+        settings_json["windowHeight"] = serde_json::Value::from(size.height);
+    }
+    let updated_str = serde_json::to_string_pretty(&settings_json).map_err(|e| e.to_string())?;
+    fs::write(settings_path, updated_str).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let config = get_config(&app.handle())?;
-            let db = init_db(&config)?;
+            let (config, is_onboarded) = get_config(&app.handle())?;
+            let db = if is_onboarded {
+                init_db(&config)?
+            } else {
+                let conn = Connection::open_in_memory().map_err(|e| e.to_string())?;
+                setup_db_tables(&conn)?;
+                conn
+            };
             let clipboard = Clipboard::new().map_err(|e| e.to_string())?;
             app.manage(AppState {
                 config: Mutex::new(config.clone()),
@@ -1856,6 +2011,8 @@ pub fn run() {
             open_library_folder,
             regenerate_thumbnails,
             regenerate_asset,
+            check_onboarding_status,
+            complete_onboarding,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

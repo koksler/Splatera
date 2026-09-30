@@ -18,6 +18,7 @@ import ErrorBoundary from './components/errorBoundary';
 import HelpDock from './components/HelpDock';
 import ScrollOverlay from './components/scrollOverlay';
 import TagCarousel from './components/TagCarousel';
+import Onboarding from './components/Onboarding';
 
 
 const SKELETON_ITEMS = Array.from({ length: 12 }).map((_, i) => ({
@@ -103,6 +104,8 @@ function App() {
   const [batchSize, setBatchSize] = useState(30);
   const [gpuAcceleration, setGpuAcceleration] = useState(true);
   const [tagPreviews, setTagPreviews] = useState([]);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStatus, setOnboardingStatus] = useState(null);
   const settingsRef = useRef({});
   const saveDebounceRef = useRef(null);
 
@@ -509,6 +512,18 @@ function App() {
   useEffect(() => {
     invoke('show_window').catch(console.error);
 
+    // Check if onboarding is needed
+    invoke('check_onboarding_status')
+      .then((status) => {
+        setOnboardingStatus(status);
+        if (status && status.needs_onboarding) {
+          setShowOnboarding(true);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to check onboarding status:', err);
+      });
+
     // Load settings from settings.json
     invoke('load_settings')
       .then((settingsStr) => {
@@ -794,6 +809,17 @@ function App() {
     }
   };
 
+  const handleOnboardingComplete = (data) => {
+    setShowOnboarding(false);
+    if (data.themeMode) {
+      setThemeMode(data.themeMode);
+    }
+    if (data.masonryType) {
+      setViewMode(data.masonryType.toLowerCase() === 'horizontal' ? 'horizontal' : 'grid');
+    }
+    setRefreshTrigger((prev) => prev + 1);
+  };
+
   const handleTogglePillHeader = (nextValue) => {
     setPillHeader(nextValue);
     saveAppSetting('pillHeader', nextValue);
@@ -1020,6 +1046,16 @@ function App() {
         onBatchDelete={handleBatchDelete}
       />
       <ScrollOverlay />
+
+      <Onboarding
+        isOpen={showOnboarding}
+        onComplete={handleOnboardingComplete}
+        onClose={() => setShowOnboarding(false)}
+        initialStatus={onboardingStatus}
+        currentTheme={themeMode}
+        onThemeChange={setThemeMode}
+        currentViewMode={viewMode}
+      />
     </div>
   );
 
