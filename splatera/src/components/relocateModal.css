@@ -1,0 +1,128 @@
+/* Relocate Modal Backdrop Overlay */
+.relocate-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.relocate-modal-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+
+  background-image: 
+    linear-gradient(#1a1a1a 1px, transparent 1px),
+    linear-gradient(90deg, #1a1a1a 1px, transparent 1px);
+  background-size: 35px 35px;
+
+  -webkit-mask-image: linear-gradient(to top, black 0%, transparent 100%);
+  mask-image: linear-gradient(to top, black 0%, transparent 100%);
+}
+
+/* Modal Container Box */
+.relocate-modal-container {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 500px;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 30px 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  color: var(--color-text-main);
+  user-select: none;
+}
+
+/* Header Title */
+.relocate-modal-title {
+  text-align: center;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-main);
+}
+
+/* Square Preview Box (230x230) */
+.relocate-modal-preview-box {
+  position: relative;
+  width: 230px;
+  height: 230px;
+  border-radius: 10px;
+  overflow: hidden;
+  background-color: #121212;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.relocate-modal-preview-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.relocate-modal-info {
+  width: 100%;
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--color-text-button);
+  box-sizing: border-box;
+  word-break: break-all;
+}
+
+.relocate-modal-info-label {
+  font-weight: 600;
+  color: var(--color-text-main);
+  margin-bottom: 2px;
+}
+
+.relocate-modal-path-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  align-items: center;
+}
+
+.relocate-modal-input-wrap {
+  flex: 1;
+}
+
+.relocate-modal-browse-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Footer Action Buttons Row */
+.relocate-modal-footer {
+  display: flex;
+  gap: 5px;
+  width: 100%;
+  align-items: center;
+}
+
+.relocate-modal-btn-flex {
+  flex: 1;
+}

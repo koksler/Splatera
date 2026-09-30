@@ -1,8 +1,8 @@
 mod processing;
 use crate::processing::{
-    Asset, AssetKind, FileMetadata, SimplifiedAsset,
     color_distance, compute_file_hash, extract_colors, extract_metadata, generate_video_thumbnail,
-    get_video_dimensions, hex_to_rgb, save_thumbnail,
+    get_video_dimensions, hex_to_rgb, locate_moved_file, read_text_snippet, save_thumbnail,
+    Asset, AssetKind, FileMetadata, SimplifiedAsset,
 };
 
 use arboard::Clipboard;
@@ -13,8 +13,34 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegenerateAssetResult {
+    pub asset: SimplifiedAsset,
+    pub hash_changed: bool,
+    pub relocated: bool,
+    pub old_path: String,
+    pub new_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecalculateDbResult {
+    pub total: usize,
+    pub updated: usize,
+    pub relocated: usize,
+    pub broken: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchProgressPayload {
+    pub op_type: String,
+    pub current: usize,
+    pub total: usize,
+    pub message: String,
+    pub asset_name: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteOperationData {
@@ -585,7 +611,201 @@ async fn delete_tag_and_assets(state: State<'_, AppState>, tag: String) -> Resul
 }
 
 #[tauri::command]
-async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
+async fn regenerate_asset(
+    _app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    new_path: Option<String>,
+) -> Result<RegenerateAssetResult, String> {
+    let config = state.config();
+    let config_clone = config.clone();
+
+    // 1. Fetch current asset row from SQLite
+    let (old_orig_path, old_preview_path, kind_str, file_hash, tags_json, created_at, content_snippet) = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        conn.query_row(
+            "SELECT original_path, preview_path, kind, file_hash, tags, created_at, content_snippet FROM assets WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, u64>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                ))
+            },
+        )
+        .map_err(|e| format!("Asset not found in database: {}", e))?
+    };
+
+    let kind = match kind_str.as_str() {
+        "Image" => AssetKind::Image,
+        "Video" => AssetKind::Video,
+        "Text" => AssetKind::Text,
+        "Code" => AssetKind::Code,
+        _ => AssetKind::Unknown,
+    };
+    let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+
+    // 2. Determine target path and whether relocated
+    let mut relocated = false;
+    let target_path_buf = if let Some(ref np) = new_path {
+        relocated = true;
+        PathBuf::from(np)
+    } else {
+        let p = PathBuf::from(&old_orig_path);
+        if !p.exists() {
+            if let Some(found) = locate_moved_file(&p, file_hash.as_deref(), Path::new(&config.library_path)) {
+                relocated = true;
+                found
+            } else {
+                return Err("FILE_NOT_FOUND".to_string());
+            }
+        } else {
+            p
+        }
+    };
+
+    if !target_path_buf.exists() {
+        return Err("FILE_NOT_FOUND".to_string());
+    }
+
+    let target_path_str = target_path_buf.to_string_lossy().into_owned();
+    let id_clone = id.clone();
+    let old_preview_clone = old_preview_path.clone();
+    let kind_clone = kind.clone();
+
+    // 3. Process in spawn_blocking
+    let process_result = tokio::task::spawn_blocking(move || {
+        let meta = extract_metadata(&target_path_buf).map_err(|e| format!("Metadata extraction failed: {}", e))?;
+        let new_hash = compute_file_hash(&target_path_buf).map_err(|e| format!("Hash computation failed: {}", e))?;
+
+        let hash_changed = match &file_hash {
+            Some(old_h) if !old_h.is_empty() => old_h != &new_hash,
+            _ => false,
+        };
+
+        let mut width = 0;
+        let mut height = 0;
+        let mut dominant_colors = Vec::new();
+        let mut preview_path = old_preview_clone;
+        let mut new_content_snippet = content_snippet;
+
+        match kind_clone {
+            AssetKind::Image => {
+                if let Ok(img) = image::open(&target_path_buf) {
+                    width = img.width();
+                    height = img.height();
+                    dominant_colors = extract_colors(&img);
+                    if let Some(thumb) = save_thumbnail(&img, &id_clone, &config_clone) {
+                        preview_path = Some(thumb);
+                    }
+                }
+            }
+            AssetKind::Video => {
+                let (w, h) = get_video_dimensions(&target_path_buf);
+                width = w;
+                height = h;
+                if let Some(thumb) = generate_video_thumbnail(&target_path_buf, &id_clone, &config_clone) {
+                    preview_path = Some(thumb);
+                }
+            }
+            AssetKind::Text | AssetKind::Code => {
+                if let Some(snip) = read_text_snippet(&target_path_buf) {
+                    new_content_snippet = Some(snip);
+                }
+            }
+            AssetKind::Unknown => {}
+        }
+
+        Ok::<(FileMetadata, String, bool, u32, u32, Vec<String>, Option<String>, Option<String>), String>((
+            meta,
+            new_hash,
+            hash_changed,
+            width,
+            height,
+            dominant_colors,
+            preview_path,
+            new_content_snippet,
+        ))
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))??;
+
+    let (meta, new_hash, hash_changed, width, height, dominant_colors, preview_path, new_snippet) = process_result;
+
+    // 4. Update database row
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        let colors_json = serde_json::to_string(&dominant_colors).unwrap_or_default();
+        conn.execute(
+            "UPDATE assets SET 
+                original_path = ?1,
+                preview_path = ?2,
+                dominant_colors = ?3,
+                size_bytes = ?4,
+                file_name = ?5,
+                extension = ?6,
+                last_modified_os = ?7,
+                width = ?8,
+                height = ?9,
+                content_snippet = ?10,
+                is_broken = 0,
+                file_hash = ?11
+             WHERE id = ?12",
+            params![
+                target_path_str,
+                preview_path,
+                colors_json,
+                meta.size_bytes,
+                meta.file_name,
+                meta.extension,
+                meta.last_modified_os,
+                width,
+                height,
+                new_snippet,
+                new_hash,
+                id
+            ],
+        )
+        .map_err(|e| format!("Database update failed: {}", e))?;
+    }
+
+    println!(
+        "[Regenerate Asset] '{}' (ID: {}) updated. Relocated: {}, Hash changed: {} (hash: {})",
+        meta.file_name, id, relocated, hash_changed, new_hash
+    );
+
+    let simplified = SimplifiedAsset {
+        id,
+        original_path: target_path_str.clone(),
+        preview_path,
+        kind,
+        tags,
+        file_name: meta.file_name,
+        width,
+        height,
+        created_at,
+        last_modified_os: meta.last_modified_os,
+        content_snippet: new_snippet,
+        is_broken: false,
+        file_hash: Some(new_hash),
+    };
+
+    Ok(RegenerateAssetResult {
+        asset: simplified,
+        hash_changed,
+        relocated,
+        old_path: old_orig_path,
+        new_path: target_path_str,
+    })
+}
+
+#[tauri::command]
+async fn recalculate_db(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<RecalculateDbResult, String> {
     let config = state.config();
     let config_clone = config.clone();
 
@@ -635,13 +855,38 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
             .map_err(|e| e.to_string())?
     };
 
-    let valid = tokio::task::spawn_blocking(move || {
+    let total = assets.len();
+    let app_clone = app.clone();
+
+    let (valid, updated_count, relocated_count, broken_count) = tokio::task::spawn_blocking(move || {
         let mut result = Vec::new();
-        for mut a in assets {
-            let orig_path = Path::new(&a.original_path);
-            if orig_path.exists() {
+        let mut updated = 0usize;
+        let mut relocated = 0usize;
+        let mut broken = 0usize;
+
+        for (idx, mut a) in assets.into_iter().enumerate() {
+            let mut orig_path = PathBuf::from(&a.original_path);
+            let mut was_relocated = false;
+
+            if !orig_path.exists() {
+                if let Some(found) = locate_moved_file(&orig_path, a.file_hash.as_deref(), Path::new(&config_clone.library_path)) {
+                    a.original_path = found.to_string_lossy().into_owned();
+                    orig_path = found;
+                    a.is_broken = false;
+                    relocated += 1;
+                    was_relocated = true;
+                    println!("[Recalculate DB] Relocated '{}' to '{}'", a.metadata.file_name, a.original_path);
+                } else {
+                    a.is_broken = true;
+                    broken += 1;
+                    println!("[Recalculate DB] Missing asset '{}' at '{}'", a.metadata.file_name, a.original_path);
+                }
+            } else {
                 a.is_broken = false;
-                if let Ok(meta) = extract_metadata(orig_path) {
+            }
+
+            if orig_path.exists() {
+                if let Ok(meta) = extract_metadata(&orig_path) {
                     a.metadata = meta;
                 }
                 for tag in a.kind.default_tags() {
@@ -650,7 +895,7 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
                     }
                 }
                 if a.kind == AssetKind::Image {
-                    if let Ok(img) = image::open(orig_path) {
+                    if let Ok(img) = image::open(&orig_path) {
                         if a.width == 0 || a.height == 0 {
                             a.width = img.width();
                             a.height = img.height();
@@ -670,7 +915,7 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
                     }
                 } else if a.kind == AssetKind::Video {
                     if a.width == 0 || a.height == 0 {
-                        let (w, h) = get_video_dimensions(orig_path);
+                        let (w, h) = get_video_dimensions(&orig_path);
                         a.width = w;
                         a.height = h;
                     }
@@ -679,23 +924,34 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
                         None => true,
                     };
                     if needs_thumb {
-                        if let Some(new_thumb) = generate_video_thumbnail(orig_path, &a.id, &config_clone) {
+                        if let Some(new_thumb) = generate_video_thumbnail(&orig_path, &a.id, &config_clone) {
                             a.preview_path = Some(new_thumb);
                         }
                     }
                 }
-                if a.file_hash.is_none() || a.file_hash.as_deref() == Some("") {
-                    a.file_hash = compute_file_hash(orig_path).ok();
+                if a.file_hash.is_none() || a.file_hash.as_deref() == Some("") || was_relocated {
+                    a.file_hash = compute_file_hash(&orig_path).ok();
                 }
-            } else {
-                a.is_broken = true;
+                updated += 1;
             }
+
+            let _ = app_clone.emit("batch-progress", BatchProgressPayload {
+                op_type: "recalculate_db".to_string(),
+                current: idx + 1,
+                total,
+                message: format!("Processing {} of {} assets...", idx + 1, total),
+                asset_name: Some(a.metadata.file_name.clone()),
+            });
+
+            println!("[Recalculate DB] [{}/{}] Processing '{}'...", idx + 1, total, a.metadata.file_name);
+
             result.push(a);
         }
-        Ok::<Vec<Asset>, String>(result)
+
+        (result, updated, relocated, broken)
     })
     .await
-    .unwrap_or_else(|e| Err(format!("Task panicked: {}", e)))?;
+    .map_err(|e| format!("Task panicked: {}", e))?;
 
     let mut conn = state.db.lock().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
@@ -705,19 +961,21 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
         let color_json = serde_json::to_string(&a.dominant_colors).unwrap_or_default();
         let _ = tx.execute(
             "UPDATE assets SET 
-                preview_path = ?1, 
-                dominant_colors = ?2, 
-                tags = ?3, 
-                size_bytes = ?4, 
-                file_name = ?5, 
-                extension = ?6, 
-                last_modified_os = ?7, 
-                width = ?8, 
-                height = ?9, 
-                is_broken = ?10, 
-                file_hash = ?11 
-             WHERE id = ?12",
+                original_path = ?1,
+                preview_path = ?2, 
+                dominant_colors = ?3, 
+                tags = ?4, 
+                size_bytes = ?5, 
+                file_name = ?6, 
+                extension = ?7, 
+                last_modified_os = ?8, 
+                width = ?9, 
+                height = ?10, 
+                is_broken = ?11, 
+                file_hash = ?12 
+             WHERE id = ?13",
             params![
+                a.original_path,
                 a.preview_path,
                 color_json,
                 tags_json,
@@ -756,16 +1014,34 @@ async fn recalculate_db(state: State<'_, AppState>) -> Result<(), String> {
 
     let _ = conn.execute("PRAGMA optimize", ());
 
-    Ok(())
+    let _ = app.emit("batch-progress", BatchProgressPayload {
+        op_type: "recalculate_db".to_string(),
+        current: total,
+        total,
+        message: format!("Recalculate complete: {} updated, {} relocated, {} broken.", updated_count, relocated_count, broken_count),
+        asset_name: None,
+    });
+
+    println!(
+        "[Recalculate DB] Finished: {} total, {} updated, {} relocated, {} broken",
+        total, updated_count, relocated_count, broken_count
+    );
+
+    Ok(RecalculateDbResult {
+        total,
+        updated: updated_count,
+        relocated: relocated_count,
+        broken: broken_count,
+    })
 }
 
 #[tauri::command]
-async fn regenerate_thumbnails(state: State<'_, AppState>) -> Result<usize, String> {
+async fn regenerate_thumbnails(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<usize, String> {
     let config = state.config();
     let thumb_dir = Path::new(&config.library_path).join("thumbnails");
     let _ = fs::create_dir_all(&thumb_dir);
 
-    // 1. Clear out existing thumbnails directory
+    // 1. Clear out existing thumbnails directory from ground up
     if let Ok(entries) = fs::read_dir(&thumb_dir) {
         for entry in entries.flatten() {
             let _ = fs::remove_file(entry.path());
@@ -792,10 +1068,13 @@ async fn regenerate_thumbnails(state: State<'_, AppState>) -> Result<usize, Stri
         items.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
     };
 
+    let total = assets.len();
+    let app_clone = app.clone();
+
     // 3. Rebuild thumbnails in spawn_blocking
     let regenerated = tokio::task::spawn_blocking(move || {
         let mut updates = Vec::new();
-        for (id, orig_path_str, kind) in assets {
+        for (idx, (id, orig_path_str, kind)) in assets.into_iter().enumerate() {
             let orig_path = Path::new(&orig_path_str);
             if !orig_path.exists() {
                 continue;
@@ -811,6 +1090,17 @@ async fn regenerate_thumbnails(state: State<'_, AppState>) -> Result<usize, Stri
                     updates.push((id, new_thumb));
                 }
             }
+
+            let file_name = orig_path.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
+            let _ = app_clone.emit("batch-progress", BatchProgressPayload {
+                op_type: "regenerate_thumbnails".to_string(),
+                current: idx + 1,
+                total,
+                message: format!("Regenerating thumbnail {} of {}...", idx + 1, total),
+                asset_name: Some(file_name),
+            });
+
+            println!("[Regenerate Thumbnails] [{}/{}] Generating for {:?}", idx + 1, total, orig_path);
         }
         updates
     })
@@ -830,8 +1120,19 @@ async fn regenerate_thumbnails(state: State<'_, AppState>) -> Result<usize, Stri
     }
     tx.commit().map_err(|e| e.to_string())?;
 
+    let _ = app.emit("batch-progress", BatchProgressPayload {
+        op_type: "regenerate_thumbnails".to_string(),
+        current: total,
+        total,
+        message: format!("Rebuilt {} thumbnails from ground up.", count),
+        asset_name: None,
+    });
+
+    println!("[Regenerate Thumbnails] Complete. Regenerated {} thumbnails.", count);
+
     Ok(count)
 }
+
 
 #[tauri::command]
 async fn recalculate_colors(state: State<'_, AppState>) -> Result<usize, String> {
@@ -1532,6 +1833,7 @@ pub fn run() {
             get_library_info,
             open_library_folder,
             regenerate_thumbnails,
+            regenerate_asset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

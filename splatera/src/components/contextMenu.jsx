@@ -9,7 +9,7 @@ import {
   useInteractions,
   FloatingPortal,
 } from '@floating-ui/react';
-import { Copy, Clipboard, Trash2, Edit3, ExternalLink, Tags, Search, Tag } from 'lucide-react';
+import { Copy, Clipboard, Trash2, Edit3, ExternalLink, Tags, Search, Tag, RefreshCw } from 'lucide-react';
 import './contextMenu.css';
 
 export default function ContextMenu({ isOpen, setIsOpen, x, y, onAction, mode = 'card', kind }) {
@@ -80,6 +80,9 @@ export default function ContextMenu({ isOpen, setIsOpen, x, y, onAction, mode = 
             </div>
             <div className="context-menu-item" onClick={() => onAction('rename')}>
               <Edit3 size={14} /> Rename
+            </div>
+            <div className="context-menu-item" onClick={() => onAction('regenerate')}>
+              <RefreshCw size={14} /> Regenerate asset
             </div>
             <div className="context-menu-item danger" onClick={() => onAction('delete')}>
               <Trash2 size={14} /> Delete from library

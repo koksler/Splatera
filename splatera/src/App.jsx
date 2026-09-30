@@ -10,6 +10,7 @@ import Card from './components/card';
 import Notification from './components/notification';
 import Lightbox from './components/lightbox';
 import InputModal from './components/inputModal';
+import RelocateModal from './components/relocateModal';
 import DropOverlay from './components/dropOverlay';
 import AssetModals from './components/AssetModals';
 import ErrorBoundary from './components/errorBoundary';
@@ -52,6 +53,7 @@ const mapAsset = (assetInfo) => {
     contentSnippet: assetInfo.content_snippet,
     previewPath: assetInfo.preview_path ?? null,
     isBroken: assetInfo.is_broken ?? false,
+    fileHash: assetInfo.file_hash ?? null,
   };
 };
 
@@ -84,6 +86,7 @@ function App() {
   // lightboxIndex: index into `images` of the currently open lightbox item
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const [renameData, setRenameData] = useState(null);
+  const [relocateData, setRelocateData] = useState(null);
   const [pendingImport, setPendingImport] = useState(null);
   const [importHasTemp, setImportHasTemp] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -357,6 +360,32 @@ function App() {
     setRenameData(null);
   };
 
+  const confirmRelocate = async (newPath) => {
+    if (newPath && relocateData) {
+      try {
+        console.log(`[Regenerate] Relocating asset "${relocateData.id}" to: ${newPath}`);
+        showTemporaryNotif('Relocating Asset...', 'Checking file and regenerating preview...', { duration: 5000 });
+        const res = await invoke('regenerate_asset', { id: relocateData.id, newPath });
+        console.log('[Regenerate] Relocate result:', res);
+
+        const updatedMapped = mapAsset(res.asset);
+        setImages((prev) =>
+          prev.map((img) => (img.id === relocateData.id ? { ...img, ...updatedMapped } : img))
+        );
+        setRefreshTrigger((prev) => prev + 1);
+
+        const desc = res.hash_changed
+          ? 'Relocated and thumbnail rebuilt. Note: File hash differed from previous record.'
+          : 'Relocated and thumbnail rebuilt successfully.';
+        showTemporaryNotif('Asset Relocated & Regenerated', desc, { duration: 4000 });
+      } catch (err) {
+        console.error('Relocation failed:', err);
+        showTemporaryNotif('Relocation Failed', String(err));
+      }
+    }
+    setRelocateData(null);
+  };
+
   const handleSaveTags = async (target, updatedTags) => {
     try {
       const idsToUpdate = target?.isBatch
@@ -547,12 +576,48 @@ function App() {
       if (filePaths?.length) startImportFlow(filePaths);
     };
 
+    const handleRequestRegenerate = async (e) => {
+      const asset = e.detail;
+      if (!asset?.id) return;
+      try {
+        console.log(`[Regenerate] Requesting regeneration for: "${asset.name}" (${asset.id})`);
+        showTemporaryNotif('Regenerating Asset...', `Verifying "${asset.name}"...`, { duration: 5000 });
+
+        const res = await invoke('regenerate_asset', { id: asset.id, newPath: null });
+        console.log('[Regenerate] Single asset result:', res);
+
+        const updatedMapped = mapAsset(res.asset);
+        setImages((prev) =>
+          prev.map((img) => (img.id === asset.id ? { ...img, ...updatedMapped } : img))
+        );
+        setRefreshTrigger((prev) => prev + 1);
+
+        let desc = 'Thumbnail and hash check complete.';
+        if (res.relocated) {
+          desc = `File located at "${res.new_path}". Thumbnail rebuilt.`;
+        } else if (res.hash_changed) {
+          desc = 'File content updated (new hash). Thumbnail rebuilt.';
+        }
+        showTemporaryNotif('Asset Regenerated', desc, { duration: 3500 });
+      } catch (err) {
+        const errStr = String(err);
+        if (errStr.includes('FILE_NOT_FOUND')) {
+          console.warn(`[Regenerate] File not found for asset "${asset.name}". Prompting relocation modal.`);
+          setRelocateData(asset);
+        } else {
+          console.error('[Regenerate] Failed to regenerate asset:', err);
+          showTemporaryNotif('Regeneration Failed', errStr);
+        }
+      }
+    };
+
     window.addEventListener('reload-library', handleReload);
     window.addEventListener('open-rename-modal', handleRenameModal);
     window.addEventListener('open-tag-modal', handleTagModal);
     window.addEventListener('open-lightbox', handleOpenLightbox);
     window.addEventListener('show-notification', handleGlobalNotif);
     window.addEventListener('import-files', handleImportFiles);
+    window.addEventListener('request-regenerate-asset', handleRequestRegenerate);
 
     const unlistenDragEnter = listen('tauri://drag-enter', () => setIsDragging(true));
     const unlistenDragLeave = listen('tauri://drag-leave', () => setIsDragging(false));
@@ -561,6 +626,20 @@ function App() {
       const filePaths = event.payload.paths;
       if (!filePaths?.length) return;
       startImportFlow(filePaths);
+    });
+    const unlistenBatchProgress = listen('batch-progress', (event) => {
+      const { op_type, current, total, message, asset_name } = event.payload;
+      const pct = total > 0 ? (current / total) * 100 : 0;
+      const title = op_type === 'recalculate_db' ? 'Recalculating Database...' : 'Regenerating Thumbnails...';
+      const desc = asset_name ? `${message} (${asset_name})` : message;
+      console.log(`[Batch Progress] [${op_type}] ${current}/${total}: ${desc}`);
+      setNotif({
+        show: true,
+        title,
+        desc,
+        progress: pct,
+        undoId: null,
+      });
     });
 
     return () => {
@@ -572,10 +651,12 @@ function App() {
       window.removeEventListener('open-lightbox', handleOpenLightbox);
       window.removeEventListener('show-notification', handleGlobalNotif);
       window.removeEventListener('import-files', handleImportFiles);
+      window.removeEventListener('request-regenerate-asset', handleRequestRegenerate);
       window.removeEventListener('optimistic-delete', handleOptimisticDelete);
       unlistenDragEnter.then(u => u());
       unlistenDragLeave.then(u => u());
       unlistenDrop.then(u => u());
+      unlistenBatchProgress.then(u => u());
       if (notifTimeout.current) clearTimeout(notifTimeout.current);
     };
   }, []);
@@ -848,6 +929,14 @@ function App() {
           data={renameData}
           onConfirm={confirmRename}
           onCancel={() => setRenameData(null)}
+        />
+      )}
+      {relocateData && (
+        <RelocateModal
+          title="Locate missing file"
+          data={relocateData}
+          onConfirm={confirmRelocate}
+          onCancel={() => setRelocateData(null)}
         />
       )}
       {tagData && (

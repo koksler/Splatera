@@ -169,6 +169,81 @@ pub fn compute_file_hash(path: &Path) -> Result<String, String> {
     Ok(format!("{:016x}", hasher.digest()))
 }
 
+pub fn locate_moved_file(
+    original_path: &Path,
+    expected_hash: Option<&str>,
+    library_path: &Path,
+) -> Option<PathBuf> {
+    if original_path.exists() {
+        return Some(original_path.to_path_buf());
+    }
+
+    let target_file_name = original_path.file_name()?;
+    let target_ext = original_path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+
+    // 1. Check parent directory and immediate subdirectories
+    if let Some(parent) = original_path.parent() {
+        if parent.exists() {
+            // First look for exact filename matches in parent and subfolders (max depth 2)
+            for entry in WalkDir::new(parent).max_depth(2).into_iter().filter_map(|e| e.ok()) {
+                let p = entry.path();
+                if p.is_file() && p.file_name() == Some(target_file_name) {
+                    if let Some(expected) = expected_hash {
+                        if let Ok(h) = compute_file_hash(p) {
+                            if h == expected {
+                                return Some(p.to_path_buf());
+                            }
+                        }
+                    } else {
+                        return Some(p.to_path_buf());
+                    }
+                }
+            }
+
+            // If we have an expected hash and didn't find by exact filename, check files with same extension in direct parent
+            if let Some(expected) = expected_hash {
+                if let Ok(entries) = fs::read_dir(parent) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if p.is_file() {
+                            let ext = p
+                                .extension()
+                                .map(|e| e.to_string_lossy().to_lowercase())
+                                .unwrap_or_default();
+                            if ext == target_ext {
+                                if let Ok(h) = compute_file_hash(&p) {
+                                    if h == expected {
+                                        return Some(p);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Check local library storage: <library_path>/local/<ext>/<file_name>
+    let local_file = library_path.join("local").join(&target_ext).join(target_file_name);
+    if local_file.exists() && local_file.is_file() {
+        if let Some(expected) = expected_hash {
+            if let Ok(h) = compute_file_hash(&local_file) {
+                if h == expected {
+                    return Some(local_file);
+                }
+            }
+        } else {
+            return Some(local_file);
+        }
+    }
+
+    None
+}
+
 pub fn process_single_path(path: &Path, config: &AppConfig) -> Result<Asset, String> {
     let metadata = extract_metadata(path)?;
     let asset_id = Uuid::new_v4().to_string();
@@ -650,7 +725,7 @@ pub async fn process_asset(
                             created_at: row.get(8)?,
                             last_modified_os: row.get(9)?,
                             content_snippet: row.get(10)?,
-                            is_broken: row.get::<_, i32>(11)? == 0,
+                            is_broken: row.get::<_, i32>(11)? == 1,
                             file_hash: row.get(12)?,
                         })
                     },

@@ -83,25 +83,31 @@ export default function SettingsMenu({
   const handleRecalculate = async () => {
     try {
       setIsOpen(false);
+      console.log('[Recalculate DB] Starting database recalculation...');
       window.dispatchEvent(new CustomEvent('show-notification', {
         detail: {
-          title: 'Optimizing Database...',
-          desc: 'Regenerating thumbnails and verifying file integrity...',
-          progress: 50,
-          duration: 60000
+          title: 'Recalculating Database...',
+          desc: 'Scanning assets and verifying integrity...',
+          progress: 0,
+          duration: 300000
         }
       }));
 
-      await invoke('recalculate_db');
+      const res = await invoke('recalculate_db');
+      console.log('[Recalculate DB] Finished with result:', res);
 
       window.dispatchEvent(new CustomEvent('reload-library'));
+      const desc = res 
+        ? `Recalculated ${res.total} assets: ${res.updated} updated, ${res.relocated} relocated, ${res.broken} missing.`
+        : 'Library recalculated successfully.';
+
       window.dispatchEvent(new CustomEvent('show-notification', {
-        detail: { title: 'Database Optimized', desc: 'Library reloaded successfully.' }
+        detail: { title: 'Database Recalculated', desc, duration: 5000 }
       }));
     } catch (error) {
-      console.error("Error on BD recalc:", error);
+      console.error("Error on DB recalculation:", error);
       window.dispatchEvent(new CustomEvent('show-notification', {
-        detail: { title: 'Optimization Failed', desc: 'Could not optimize the database.' }
+        detail: { title: 'Recalculation Failed', desc: String(error) }
       }));
     }
   };
@@ -109,25 +115,27 @@ export default function SettingsMenu({
   const handleRegenerateThumbnails = async () => {
     try {
       setIsOpen(false);
+      console.log('[Regenerate Thumbnails] Starting ground-up thumbnail rebuild...');
       window.dispatchEvent(new CustomEvent('show-notification', {
         detail: {
           title: 'Regenerating Thumbnails...',
-          desc: 'Clearing cache and generating new previews...',
-          progress: 50,
-          duration: 60000
+          desc: 'Clearing cache and building previews from ground up...',
+          progress: 0,
+          duration: 300000
         }
       }));
 
       const count = await invoke('regenerate_thumbnails');
+      console.log('[Regenerate Thumbnails] Rebuilt count:', count);
 
       window.dispatchEvent(new CustomEvent('reload-library'));
       window.dispatchEvent(new CustomEvent('show-notification', {
-        detail: { title: 'Thumbnails Regenerated', desc: `Rebuilt previews for ${count} assets.` }
+        detail: { title: 'Thumbnails Regenerated', desc: `Rebuilt previews for ${count} assets from ground up.`, duration: 5000 }
       }));
     } catch (error) {
       console.error("Error regenerating thumbnails:", error);
       window.dispatchEvent(new CustomEvent('show-notification', {
-        detail: { title: 'Regeneration Failed', desc: 'Could not rebuild thumbnails.' }
+        detail: { title: 'Regeneration Failed', desc: String(error) }
       }));
     }
   };

@@ -165,6 +165,9 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
       case 'rename':
         window.dispatchEvent(new CustomEvent('open-rename-modal', { detail: data }));
         break;
+      case 'regenerate':
+        window.dispatchEvent(new CustomEvent('request-regenerate-asset', { detail: data }));
+        break;
       case 'add_tag':
         window.dispatchEvent(new CustomEvent('open-tag-modal', { detail: data }));
         break;
