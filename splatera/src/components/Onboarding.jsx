@@ -61,17 +61,17 @@ export default function Onboarding({
     }
   }, [currentTheme]);
 
-  // Handle ESC key to dismiss if opened for testing
+  // Handle ESC key — only dismiss if NOT a mandatory first-run setup
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && onClose) {
+      if (e.key === 'Escape' && onClose && !initialStatus?.needs_onboarding) {
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, initialStatus]);
 
   if (!isOpen) return null;
 
