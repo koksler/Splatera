@@ -1777,11 +1777,17 @@ async fn save_settings(window: tauri::Window, state: State<'_, AppState>, settin
     let lib_path = state.config().library_path;
     let settings_path = Path::new(&lib_path).join("settings.json");
     let mut settings_json: serde_json::Value = serde_json::from_str(&settings).unwrap_or_else(|_| serde_json::json!({}));
-    if let (Ok(pos), Ok(size)) = (window.outer_position(), window.outer_size()) {
-        settings_json["windowX"] = serde_json::Value::from(pos.x);
-        settings_json["windowY"] = serde_json::Value::from(pos.y);
-        settings_json["windowWidth"] = serde_json::Value::from(size.width);
-        settings_json["windowHeight"] = serde_json::Value::from(size.height);
+    let is_minimized = window.is_minimized().unwrap_or(false);
+    let is_maximized = window.is_maximized().unwrap_or(false);
+    if !is_minimized && !is_maximized {
+        if let (Ok(pos), Ok(size)) = (window.outer_position(), window.outer_size()) {
+            if size.width >= 366 && size.height >= 200 {
+                settings_json["windowX"] = serde_json::Value::from(pos.x);
+                settings_json["windowY"] = serde_json::Value::from(pos.y);
+                settings_json["windowWidth"] = serde_json::Value::from(size.width);
+                settings_json["windowHeight"] = serde_json::Value::from(size.height);
+            }
+        }
     }
 
     // Update in-memory AppConfig live
@@ -1811,6 +1817,40 @@ async fn load_settings(state: State<'_, AppState>) -> Result<String, String> {
         return Ok("{}".to_string());
     }
     fs::read_to_string(settings_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn save_search_history(state: State<'_, AppState>, history: String) -> Result<(), String> {
+    let lib_path = state.config().library_path;
+    let history_path = Path::new(&lib_path).join("search_history.json");
+    fs::write(history_path, history).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn load_search_history(state: State<'_, AppState>) -> Result<String, String> {
+    let lib_path = state.config().library_path;
+    let history_path = Path::new(&lib_path).join("search_history.json");
+    if !history_path.exists() {
+        return Ok("{\"searches\":[],\"tags\":[],\"colors\":[]}".to_string());
+    }
+    fs::read_to_string(history_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_search_preview(state: State<'_, AppState>, query: String) -> Result<Option<String>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let pattern = format!("%{}%", query.trim().to_lowercase());
+    let mut stmt = conn
+        .prepare("SELECT preview_path, original_path FROM assets WHERE (file_name LIKE ?1 OR tags LIKE ?1 OR content_snippet LIKE ?1) AND (preview_path IS NOT NULL OR original_path IS NOT NULL) ORDER BY RANDOM() LIMIT 1")
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt.query([pattern]).map_err(|e| e.to_string())?;
+    if let Some(row) = rows.next().map_err(|e| e.to_string())? {
+        let preview_path: Option<String> = row.get(0).ok();
+        let original_path: Option<String> = row.get(1).ok();
+        Ok(preview_path.or(original_path))
+    } else {
+        Ok(None)
+    }
 }
 
 #[tauri::command]
@@ -1929,42 +1969,103 @@ pub fn run() {
 
             if let Some(main_window) = app.get_webview_window("main") {
                 let settings_path = std::path::Path::new(&config.library_path).join("settings.json");
+                let mut restored_size = false;
                 if settings_path.exists() {
                     if let Ok(settings_str) = std::fs::read_to_string(&settings_path) {
                         if let Ok(settings_json) = serde_json::from_str::<serde_json::Value>(&settings_str) {
                             if let (Some(x), Some(y)) = (settings_json.get("windowX").and_then(|v| v.as_f64()), settings_json.get("windowY").and_then(|v| v.as_f64())) {
-                                let _ = main_window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x as i32, y as i32)));
+                                if x > -10000.0 && y > -10000.0 {
+                                    let _ = main_window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x as i32, y as i32)));
+                                }
                             }
                             if let (Some(w), Some(h)) = (settings_json.get("windowWidth").and_then(|v| v.as_f64()), settings_json.get("windowHeight").and_then(|v| v.as_f64())) {
-                                let _ = main_window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(w as u32, h as u32)));
+                                let width = (w as u32).max(366);
+                                let height = (h as u32).max(200);
+                                let _ = main_window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(width, height)));
+                                restored_size = true;
                             }
                         }
                     }
                 }
+                if !restored_size {
+                    // Default to current minimal state: width 366, height 875
+                    let _ = main_window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(366, 875)));
+                }
 
                 let main_window_clone = main_window.clone();
                 let config_clone = config.clone();
+                let last_normal_bounds = std::sync::Arc::new(std::sync::Mutex::new(None::<(i32, i32, u32, u32)>));
+                let last_normal_bounds_clone = last_normal_bounds.clone();
+
                 main_window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { .. } = event {
-                        if let (Ok(pos), Ok(size)) = (main_window_clone.outer_position(), main_window_clone.outer_size()) {
-                            let settings_path = std::path::Path::new(&config_clone.library_path).join("settings.json");
-                            let mut settings_json = if settings_path.exists() {
-                                if let Ok(settings_str) = std::fs::read_to_string(&settings_path) {
-                                    serde_json::from_str::<serde_json::Value>(&settings_str).unwrap_or_else(|_| serde_json::json!({}))
-                                } else {
-                                    serde_json::json!({})
+                    match event {
+                        tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(_) => {
+                            if let Ok(is_min) = main_window_clone.is_minimized() {
+                                let _ = main_window_clone.emit("window-minimized-state", is_min);
+                            }
+                            let is_min = main_window_clone.is_minimized().unwrap_or(false);
+                            let is_max = main_window_clone.is_maximized().unwrap_or(false);
+                            if !is_min && !is_max {
+                                if let (Ok(pos), Ok(size)) = (main_window_clone.outer_position(), main_window_clone.outer_size()) {
+                                    if size.width >= 366 && size.height >= 200 {
+                                        if let Ok(mut bounds) = last_normal_bounds_clone.lock() {
+                                            *bounds = Some((pos.x, pos.y, size.width, size.height));
+                                        }
+                                    }
                                 }
-                            } else {
-                                serde_json::json!({})
-                            };
-                            settings_json["windowX"] = serde_json::Value::from(pos.x);
-                            settings_json["windowY"] = serde_json::Value::from(pos.y);
-                            settings_json["windowWidth"] = serde_json::Value::from(size.width);
-                            settings_json["windowHeight"] = serde_json::Value::from(size.height);
-                            if let Ok(updated_str) = serde_json::to_string_pretty(&settings_json) {
-                                let _ = std::fs::write(&settings_path, updated_str);
                             }
                         }
+                        tauri::WindowEvent::Moved(_) => {
+                            let is_min = main_window_clone.is_minimized().unwrap_or(false);
+                            let is_max = main_window_clone.is_maximized().unwrap_or(false);
+                            if !is_min && !is_max {
+                                if let (Ok(pos), Ok(size)) = (main_window_clone.outer_position(), main_window_clone.outer_size()) {
+                                    if size.width >= 366 && size.height >= 200 {
+                                        if let Ok(mut bounds) = last_normal_bounds_clone.lock() {
+                                            *bounds = Some((pos.x, pos.y, size.width, size.height));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        tauri::WindowEvent::CloseRequested { .. } => {
+                            let mut target_bounds = None;
+                            let is_min = main_window_clone.is_minimized().unwrap_or(false);
+                            let is_max = main_window_clone.is_maximized().unwrap_or(false);
+                            if !is_min && !is_max {
+                                if let (Ok(pos), Ok(size)) = (main_window_clone.outer_position(), main_window_clone.outer_size()) {
+                                    if size.width >= 366 && size.height >= 200 {
+                                        target_bounds = Some((pos.x, pos.y, size.width, size.height));
+                                    }
+                                }
+                            }
+                            if target_bounds.is_none() {
+                                if let Ok(bounds) = last_normal_bounds_clone.lock() {
+                                    target_bounds = *bounds;
+                                }
+                            }
+
+                            if let Some((x, y, w, h)) = target_bounds {
+                                let settings_path = std::path::Path::new(&config_clone.library_path).join("settings.json");
+                                let mut settings_json = if settings_path.exists() {
+                                    if let Ok(settings_str) = std::fs::read_to_string(&settings_path) {
+                                        serde_json::from_str::<serde_json::Value>(&settings_str).unwrap_or_else(|_| serde_json::json!({}))
+                                    } else {
+                                        serde_json::json!({})
+                                    }
+                                } else {
+                                    serde_json::json!({})
+                                };
+                                settings_json["windowX"] = serde_json::Value::from(x);
+                                settings_json["windowY"] = serde_json::Value::from(y);
+                                settings_json["windowWidth"] = serde_json::Value::from(w);
+                                settings_json["windowHeight"] = serde_json::Value::from(h);
+                                if let Ok(updated_str) = serde_json::to_string_pretty(&settings_json) {
+                                    let _ = std::fs::write(&settings_path, updated_str);
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 });
             }
@@ -2006,6 +2107,9 @@ pub fn run() {
             clear_library,
             save_settings,
             load_settings,
+            save_search_history,
+            load_search_history,
+            get_search_preview,
             processing::expand_directory,
             get_library_info,
             open_library_folder,

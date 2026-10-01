@@ -102,6 +102,12 @@ html {
   border: 1px dashed transparent;
 }
 
+.app-container.app-frozen .content-container,
+.app-container.app-frozen .tag-carousel-container {
+  content-visibility: hidden;
+  pointer-events: none;
+}
+
 .content-container {
   padding: 0 10px 20px 10px;
   margin-top: 20px;

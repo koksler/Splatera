@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredVa
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { MasonryScroller } from 'masonic';
 
 import './App.css';
@@ -103,9 +104,15 @@ function App() {
   const [disableBlur, setDisableBlur] = useState(false);
   const [batchSize, setBatchSize] = useState(30);
   const [gpuAcceleration, setGpuAcceleration] = useState(true);
+  const [freezeOnMinimize, setFreezeOnMinimize] = useState(true);
+  const [isWindowMinimized, setIsWindowMinimized] = useState(false);
+  const pendingLibraryReloadRef = useRef(false);
+  const isAppFrozenRef = useRef(false);
   const [tagPreviews, setTagPreviews] = useState([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStatus, setOnboardingStatus] = useState(null);
+  const [setupMode, setSetupMode] = useState('Portable');
+  const [localStoragePath, setLocalStoragePath] = useState('');
   const settingsRef = useRef({});
   const saveDebounceRef = useRef(null);
 
@@ -571,6 +578,17 @@ function App() {
           if (settings.gpuAcceleration !== undefined) {
             setGpuAcceleration(Boolean(settings.gpuAcceleration));
           }
+          if (settings.freezeOnMinimize !== undefined) {
+            setFreezeOnMinimize(Boolean(settings.freezeOnMinimize));
+          } else {
+            setFreezeOnMinimize(true);
+          }
+          if (settings.setupMode !== undefined) {
+            setSetupMode(settings.setupMode);
+          }
+          if (settings.localStoragePath !== undefined) {
+            setLocalStoragePath(settings.localStoragePath);
+          }
         } catch (e) {
           console.error("Failed to parse settings.json", e);
         }
@@ -583,7 +601,13 @@ function App() {
     window.addEventListener('dragover', preventDefault);
     window.addEventListener('drop', preventDefault);
 
-    const handleReload = () => setRefreshTrigger(prev => prev + 1);
+    const handleReload = () => {
+      if (isAppFrozenRef.current) {
+        pendingLibraryReloadRef.current = true;
+      } else {
+        setRefreshTrigger((prev) => prev + 1);
+      }
+    };
     const handleRenameModal = (e) => setRenameData(e.detail);
     const handleTagModal = (e) => setTagData(e.detail);
     const handleDeleteDeviceModal = (e) => {
@@ -817,7 +841,40 @@ function App() {
     if (data.masonryType) {
       setViewMode(data.masonryType.toLowerCase() === 'horizontal' ? 'horizontal' : 'grid');
     }
+    if (data.setupMode) {
+      setSetupMode(data.setupMode);
+    }
+    if (data.libraryLocation) {
+      setLocalStoragePath(data.libraryLocation);
+    }
+    // Re-fetch settings.json so settingsRef.current is in sync with what
+    // complete_onboarding wrote to disk. Without this, the next saveAppSetting
+    // call would overwrite settings.json with a near-empty object.
+    invoke('load_settings')
+      .then((settingsStr) => {
+        try {
+          settingsRef.current = JSON.parse(settingsStr);
+        } catch (e) {
+          console.error('Failed to parse settings after onboarding', e);
+        }
+      })
+      .catch((err) => console.error('Failed to reload settings after onboarding', err));
     setRefreshTrigger((prev) => prev + 1);
+  };
+
+  const handleSetupModeChange = (nextValue) => {
+    setSetupMode(nextValue);
+    saveAppSetting('setupMode', nextValue);
+  };
+
+  const handleLocalStoragePathChange = (nextValue) => {
+    setLocalStoragePath(nextValue);
+    settingsRef.current = { ...settingsRef.current, localStoragePath: nextValue };
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = setTimeout(() => {
+      invoke('save_settings', { settings: JSON.stringify(settingsRef.current) })
+        .catch(err => console.error('Failed to save settings', err));
+    }, 400);
   };
 
   const handleTogglePillHeader = (nextValue) => {
@@ -881,6 +938,89 @@ function App() {
     saveAppSetting('gpuAcceleration', nextValue);
   };
 
+  const handleFreezeOnMinimizeChange = (nextValue) => {
+    setFreezeOnMinimize(nextValue);
+    saveAppSetting('freezeOnMinimize', nextValue);
+  };
+
+  const isAppFrozen = freezeOnMinimize && isWindowMinimized;
+
+  useEffect(() => {
+    isAppFrozenRef.current = isAppFrozen;
+  }, [isAppFrozen]);
+
+  useEffect(() => {
+    const appWindow = getCurrentWindow();
+    let isMounted = true;
+
+    const checkMinimized = async () => {
+      try {
+        const min = await appWindow.isMinimized();
+        if (isMounted) {
+          setIsWindowMinimized(Boolean(min));
+        }
+      } catch (err) {
+        console.error('[Window] Failed to check isMinimized:', err);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        checkMinimized();
+      } else {
+        if (isMounted) setIsWindowMinimized(false);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    let unlistenResize = null;
+    let unlistenFocus = null;
+    let unlistenBackendState = null;
+
+    appWindow.onResized(() => checkMinimized()).then((unlisten) => {
+      if (isMounted) unlistenResize = unlisten; else unlisten();
+    }).catch(console.error);
+
+    appWindow.onFocusChanged(() => checkMinimized()).then((unlisten) => {
+      if (isMounted) unlistenFocus = unlisten; else unlisten();
+    }).catch(console.error);
+
+    listen('window-minimized-state', (event) => {
+      if (isMounted) setIsWindowMinimized(Boolean(event.payload));
+    }).then((unlisten) => {
+      if (isMounted) unlistenBackendState = unlisten; else unlisten();
+    }).catch(console.error);
+
+    checkMinimized();
+
+    return () => {
+      isMounted = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (unlistenResize) unlistenResize();
+      if (unlistenFocus) unlistenFocus();
+      if (unlistenBackendState) unlistenBackendState();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isAppFrozen) {
+      console.log('[App] Frontend frozen (window minimized). Pausing media and rendering.');
+      document.querySelectorAll('video').forEach((vid) => {
+        try { vid.pause(); } catch (_) { }
+      });
+      window.dispatchEvent(new CustomEvent('app-freeze-state', { detail: true }));
+    } else {
+      console.log('[App] Frontend unfreezing (window restored).');
+      window.dispatchEvent(new CustomEvent('app-freeze-state', { detail: false }));
+      if (pendingLibraryReloadRef.current) {
+        console.log('[App] Executing deferred library reload after unfreeze.');
+        pendingLibraryReloadRef.current = false;
+        setRefreshTrigger((prev) => prev + 1);
+      }
+    }
+  }, [isAppFrozen]);
+
   const isSearchActive = searchQuery.trim() !== '' ||
     selectedTags.length > 0 ||
     selectedColor !== null ||
@@ -896,7 +1036,7 @@ function App() {
   };
 
   return (
-    <div className={`app-container ${isDragging ? 'dragging' : ''} ${selectedAssetIds.size > 0 ? 'has-selection' : ''}`}>
+    <div className={`app-container ${isDragging ? 'dragging' : ''} ${selectedAssetIds.size > 0 ? 'has-selection' : ''} ${isAppFrozen ? 'app-frozen' : ''}`}>
       <Header
         selectedColor={selectedColor}
         clearColor={() => setSelectedColor(null)}
@@ -910,6 +1050,7 @@ function App() {
         setSelectedTags={setSelectedTags}
         pickerColor={pickerColor}
         setPickerColor={(color) => { setPickerColor(color); setSelectedColor(color); }}
+        tagPreviews={tagPreviews}
         dateFilter={dateFilter}
         setDateFilter={setDateFilter}
         viewMode={viewMode}
@@ -930,6 +1071,12 @@ function App() {
         onBatchSizeChange={handleBatchSizeChange}
         gpuAcceleration={gpuAcceleration}
         onGpuAccelerationChange={handleGpuAccelerationChange}
+        freezeOnMinimize={freezeOnMinimize}
+        onFreezeOnMinimizeChange={handleFreezeOnMinimizeChange}
+        setupMode={setupMode}
+        onSetupModeChange={handleSetupModeChange}
+        localStoragePath={localStoragePath}
+        onLocalStoragePathChange={handleLocalStoragePathChange}
       />
 
       <Notification
@@ -1236,7 +1383,7 @@ const LibraryGrid = memo(({ items, viewMode, loadMore, hasMore, onOpenLightbox, 
       if (rafId) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
         const newWidth = entry.contentRect.width;
-        if (Math.abs(newWidth - lastWidth) > 1) {
+        if (newWidth > 0 && Math.abs(newWidth - lastWidth) > 1) {
           if (wrapper && !wrapper.classList.contains('is-resizing')) {
             wrapper.classList.add('is-resizing');
           }

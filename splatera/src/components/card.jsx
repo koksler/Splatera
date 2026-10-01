@@ -13,6 +13,11 @@ window.addEventListener('set-autoplay-videos', (e) => {
   autoplayVideos = e.detail;
 });
 
+let isAppFrozen = false;
+window.addEventListener('app-freeze-state', (e) => {
+  isAppFrozen = Boolean(e.detail);
+});
+
 const getLanguage = (ext) => {
   if (!ext) return 'text';
   const map = { js: 'javascript', py: 'python', rs: 'rust', html: 'html', css: 'css', json: 'json', md: 'markdown' };
@@ -63,10 +68,26 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
     if (!data || !data.name) return;
     const ext = data.name.split('.').pop().toLowerCase();
     const isVideo = data.kind === 'Video' || ext === 'mp4' || ext === 'webm' || ext === 'mov';
-    if (autoplayVideos && isVideo && videoRef.current) {
+    if (!isAppFrozen && autoplayVideos && isVideo && videoRef.current) {
       videoRef.current.play().catch(() => { });
     }
   }, [data?.id]);
+
+  useEffect(() => {
+    const handleFreeze = (e) => {
+      const frozen = Boolean(e.detail);
+      if (frozen) {
+        if (videoRef.current) {
+          videoRef.current.pause();
+        }
+        setIsGifHovered(false);
+      } else if (autoplayVideos && videoRef.current) {
+        videoRef.current.play().catch(() => { });
+      }
+    };
+    window.addEventListener('app-freeze-state', handleFreeze);
+    return () => window.removeEventListener('app-freeze-state', handleFreeze);
+  }, []);
 
   if (!data) return null;
 
@@ -91,7 +112,7 @@ function Card({ data, index, onOpenLightbox, isSelected, onToggleSelect, hasSele
 
   const handleMouseEnter = () => {
     const isScrolling = document.querySelector('.app-container')?.classList.contains('is-scrolling');
-    if (isScrolling) return;
+    if (isScrolling || isAppFrozen) return;
 
     setIsHovered(true);
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
