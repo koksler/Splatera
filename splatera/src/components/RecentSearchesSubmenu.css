@@ -1,0 +1,52 @@
+.recent-searches-submenu {
+  box-sizing: border-box;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  max-height: 400px;
+  overflow: hidden;
+}
+
+.recent-category-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.recent-category-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--color-text-button);
+  user-select: none;
+  margin: 0;
+}
+
+.recent-category-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  cursor: grab;
+  user-select: none;
+  padding: 1px 0;
+}
+
+.recent-category-row:active {
+  cursor: grabbing;
+}
+
+.recent-category-row::-webkit-scrollbar {
+  display: none;
+}
+
+.recent-category-item-wrapper {
+  flex-shrink: 0;
+}
