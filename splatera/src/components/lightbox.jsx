@@ -41,12 +41,23 @@ export default function Lightbox({ file, onClose, onPrev, onNext }) {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
-      if (e.key === 'ArrowLeft' && onPrev) { e.preventDefault(); onPrev(); }
-      if (e.key === 'ArrowRight' && onNext) { e.preventDefault(); onNext(); }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      } else if (e.key === 'ArrowLeft' && onPrev) {
+        e.preventDefault();
+        onPrev();
+      } else if (e.key === 'ArrowRight' && onNext) {
+        e.preventDefault();
+        onNext();
+      }
     };
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [onClose, onPrev, onNext]);
 
+  useEffect(() => {
     const overlay = overlayRef.current;
     if (!overlay) return;
 
@@ -65,12 +76,8 @@ export default function Lightbox({ file, onClose, onPrev, onNext }) {
     };
 
     overlay.addEventListener('wheel', handleWheelNative, { passive: false });
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      overlay.removeEventListener('wheel', handleWheelNative);
-    };
-  }, [onClose, onPrev, onNext, isCodeOrText]);
+    return () => overlay.removeEventListener('wheel', handleWheelNative);
+  }, [isCodeOrText]);
 
   const handleMouseDown = (e) => {
     if (isCodeOrText) return;
