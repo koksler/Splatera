@@ -1,0 +1,63 @@
+.search-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  height: 32px;
+  border-radius: 8px;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  user-select: none;
+}
+
+.search-swatch:hover {
+  border-color: var(--color-text-main);
+}
+
+.search-swatch-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  min-width: 0;
+}
+
+.search-swatch-icon {
+  color: var(--color-text-button);
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+.search-swatch:hover .search-swatch-icon {
+  color: var(--color-text-main);
+}
+
+.search-swatch-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-main);
+  white-space: nowrap;
+}
+
+.search-swatch-image {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border-radius: 0 7px 7px 0;
+  display: block;
+}
+
+.search-swatch-color {
+  width: 24px;
+  height: 24px;
+  margin-right: 4px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}

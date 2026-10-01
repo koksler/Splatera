@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { FolderSearch, Import, Minimize2, Maximize, CircleX } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 import Logo from './Logo';
 import Input from './input';
 import Button from './button';
@@ -9,6 +10,12 @@ import SettingsMenu from './settingsMenu';
 import FilterMenu from './filterMenu';
 import SortMenu from './sortMenu';
 import { open } from '@tauri-apps/plugin-dialog';
+import {
+  loadSearchHistory,
+  addSearchItem,
+  addTagItem,
+  addColorItem,
+} from './searchHistory';
 
 export default memo(function Header({
   activeFilter,
@@ -43,13 +50,21 @@ export default memo(function Header({
   onBatchSizeChange,
   gpuAcceleration,
   onGpuAccelerationChange,
+  freezeOnMinimize,
+  onFreezeOnMinimizeChange,
+  setupMode,
+  onSetupModeChange,
+  localStoragePath,
+  onLocalStoragePathChange,
+  tagPreviews = [],
 }) {
   const headerRef = useRef(null);
   const appWindowRef = useRef(null);
-
+  const [searchHistory, setSearchHistory] = useState({ searches: [], tags: [], colors: [] });
 
   useEffect(() => {
     appWindowRef.current = getCurrentWindow();
+    loadSearchHistory().then((h) => setSearchHistory(h));
   }, []);
 
   const handleMinimize = useCallback(() => appWindowRef.current?.minimize(), []);
@@ -79,27 +94,75 @@ export default memo(function Header({
     }
   }, []);
 
-  const handleKeyDown = useCallback((e) => {
+  const handleColorChange = useCallback((color) => {
+    setPickerColor(color);
+    setSearchHistory((prev) => addColorItem(prev, color));
+  }, [setPickerColor]);
+
+  const handleKeyDown = useCallback(async (e) => {
     if (e.key === 'Enter') {
-      const trimmed = searchQuery.trim().toLowerCase();
+      const trimmed = searchQuery.trim();
       if (trimmed) {
-        const parts = trimmed.split(/\s+/);
+        if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(trimmed)) {
+          const hex = trimmed.length === 4
+            ? `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`
+            : trimmed;
+          const upperHex = hex.toUpperCase();
+          handleColorChange(upperHex);
+          setSearchQuery('');
+          return;
+        }
+
+        const lower = trimmed.toLowerCase();
+        const parts = lower.split(/\s+/);
         const lastWord = parts[parts.length - 1];
-        if (lastWord && !selectedTags.includes(lastWord)) {
-          setSelectedTags([...selectedTags, lastWord]);
+        if (lastWord) {
+          const preview = await invoke('get_search_preview', { query: lastWord }).catch(() => null);
+          const tagPreview = tagPreviews?.find(t => t.tag?.toLowerCase() === lastWord.toLowerCase())?.preview_path || preview;
+          setSearchHistory((prev) => addTagItem(prev, lastWord, tagPreview));
+          if (!selectedTags.includes(lastWord)) {
+            setSelectedTags([...selectedTags, lastWord]);
+          }
         }
       }
       setSearchQuery('');
       return;
     }
-    if (e.key === 'Backspace' && searchQuery === '' && selectedTags.length > 0) {
-      setSelectedTags(selectedTags.slice(0, -1));
+    if (e.key === 'Backspace' && searchQuery === '') {
+      if (selectedTags.length > 0) {
+        setSelectedTags(selectedTags.slice(0, -1));
+      } else if (selectedColor && clearColor) {
+        clearColor();
+      }
     }
-  }, [searchQuery, selectedTags, setSelectedTags, setSearchQuery]);
+  }, [searchQuery, selectedTags, setSelectedTags, setSearchQuery, selectedColor, clearColor, handleColorChange, tagPreviews]);
+
+  const handleUnfocusSearch = useCallback(async (queryText) => {
+    const trimmed = (queryText ?? searchQuery).trim();
+    if (trimmed) {
+      const preview = await invoke('get_search_preview', { query: trimmed }).catch(() => null);
+      setSearchHistory((prev) => addSearchItem(prev, trimmed, preview));
+    }
+  }, [searchQuery]);
 
   const removeTag = useCallback((tagToRemove) => {
     setSelectedTags(prev => prev.filter(t => t !== tagToRemove));
   }, [setSelectedTags]);
+
+  const handleSelectRecentSearch = useCallback((text) => {
+    setSearchQuery(text);
+  }, [setSearchQuery]);
+
+  const handleSelectRecentTag = useCallback((tag) => {
+    const normalized = tag.toLowerCase();
+    if (!selectedTags.includes(normalized)) {
+      setSelectedTags([...selectedTags, normalized]);
+    }
+  }, [selectedTags, setSelectedTags]);
+
+  const handleSelectRecentColor = useCallback((color) => {
+    handleColorChange(color);
+  }, [handleColorChange]);
 
   return (
     <header className={`splatera-header ${!pillHeader ? 'snapped' : ''}`} data-tauri-drag-region ref={headerRef}>
@@ -130,6 +193,12 @@ export default memo(function Header({
               onBatchSizeChange={onBatchSizeChange}
               gpuAcceleration={gpuAcceleration}
               onGpuAccelerationChange={onGpuAccelerationChange}
+              freezeOnMinimize={freezeOnMinimize}
+              onFreezeOnMinimizeChange={onFreezeOnMinimizeChange}
+              setupMode={setupMode}
+              onSetupModeChange={onSetupModeChange}
+              localStoragePath={localStoragePath}
+              onLocalStoragePathChange={onLocalStoragePathChange}
             />
           </div>
           <div className="import-btn-container">
@@ -163,7 +232,12 @@ export default memo(function Header({
               tooltipPosition="bottom"
               showColorPicker={true}
               pickerColor={pickerColor}
-              onPickerColorChange={setPickerColor}
+              onPickerColorChange={handleColorChange}
+              searchHistory={searchHistory}
+              onSelectRecentSearch={handleSelectRecentSearch}
+              onSelectRecentTag={handleSelectRecentTag}
+              onSelectRecentColor={handleSelectRecentColor}
+              onUnfocusSearch={handleUnfocusSearch}
             />
           </div>
         </div>
@@ -177,7 +251,7 @@ export default memo(function Header({
             <div className="filter-menu-container">
               <FilterMenu
                 pickerColor={pickerColor}
-                setPickerColor={setPickerColor}
+                setPickerColor={handleColorChange}
                 selectedTags={selectedTags}
                 setSelectedTags={setSelectedTags}
                 dateFilter={dateFilter}

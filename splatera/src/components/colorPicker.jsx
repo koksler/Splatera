@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { HexColorPicker } from 'react-colorful';
+import { X } from 'lucide-react';
 import {
   useFloating,
   autoUpdate,
   offset,
   flip,
   shift,
-  useClick,
   useDismiss,
   useRole,
   useInteractions,
@@ -14,7 +14,14 @@ import {
 } from '@floating-ui/react';
 import './colorPicker.css';
 
-export default function ColorPicker({ color, onChange, onOpenChange }) {
+export default function ColorPicker({
+  color,
+  selectedColor = null,
+  onClearColor,
+  onChange,
+  onOpenChange,
+  onClickTrigger,
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [hexInput, setHexInput] = useState(color);
 
@@ -62,24 +69,38 @@ export default function ColorPicker({ color, onChange, onOpenChange }) {
     ],
   });
 
-  const click = useClick(context);
   const dismiss = useDismiss(context);
   const role = useRole(context);
 
   const { getReferenceProps, getFloatingProps } = useInteractions([
-    click,
     dismiss,
     role,
   ]);
+
+  const handleTriggerClick = (e) => {
+    e.stopPropagation();
+    onClickTrigger?.();
+    if (selectedColor) {
+      onClearColor?.();
+      setIsOpen(false);
+    } else {
+      setIsOpen((prev) => !prev);
+    }
+  };
 
   return (
     <>
       <div
         ref={refs.setReference}
-        {...getReferenceProps()}
+        {...getReferenceProps({
+          onClick: handleTriggerClick,
+        })}
         className="color-picker-trigger"
-        style={{ backgroundColor: color }}
-      />
+        style={{ backgroundColor: selectedColor || color }}
+        title={selectedColor ? "Remove color filter" : "Filter by color"}
+      >
+        {selectedColor && <X size={14} className="color-picker-x-icon" />}
+      </div>
 
       {isOpen && (
         <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
@@ -114,4 +135,3 @@ export default function ColorPicker({ color, onChange, onOpenChange }) {
     </>
   );
 }
-
