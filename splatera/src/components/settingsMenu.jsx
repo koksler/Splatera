@@ -8,9 +8,11 @@ import {
   Rabbit,
   Package,
   SquareArrowOutUpRight,
-  RefreshCw
+  RefreshCw,
+  FolderSearch
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 import Button from './button';
 import Toggle from './toggle';
 import SelectButton from './selectButton';
@@ -49,6 +51,12 @@ export default function SettingsMenu({
   onBatchSizeChange,
   gpuAcceleration = true,
   onGpuAccelerationChange,
+  freezeOnMinimize = true,
+  onFreezeOnMinimizeChange,
+  setupMode = 'Portable',
+  onSetupModeChange,
+  localStoragePath = '',
+  onLocalStoragePathChange,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState('appearance');
@@ -63,6 +71,19 @@ export default function SettingsMenu({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -165,6 +186,27 @@ export default function SettingsMenu({
     }
   };
 
+  const handleBrowseLocalStorage = async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: 'Select where to store the library',
+      });
+      if (selected) {
+        const rawPath =
+          typeof selected === 'object' && selected !== null && selected.path
+            ? selected.path
+            : selected;
+        if (rawPath && onLocalStoragePathChange) {
+          onLocalStoragePathChange(rawPath);
+        }
+      }
+    } catch (err) {
+      console.error('Directory selection error:', err);
+    }
+  };
+
   const allSettings = [
     {
       category: 'appearance',
@@ -262,6 +304,18 @@ export default function SettingsMenu({
     },
     {
       category: 'performance',
+      group: 'rendering',
+      title: 'Freeze on minimize',
+      description: 'Pauses frontend rendering and media when the window is minimized to reduce system resource usage.',
+      control: (
+        <Toggle
+          checked={freezeOnMinimize}
+          onChange={onFreezeOnMinimizeChange}
+        />
+      )
+    },
+    {
+      category: 'performance',
       group: 'loading',
       title: 'Items per batch',
       description: 'Number of items loaded per scroll batch',
@@ -286,6 +340,29 @@ export default function SettingsMenu({
           checked={gpuAcceleration}
           onChange={onGpuAccelerationChange}
         />
+      )
+    },
+    {
+      category: 'data and storage',
+      group: 'on drive',
+      title: 'Where do we store the library?',
+      description: 'A place for elements you want saved in app. You still can just link existing documents, without duplicates.',
+      control: (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <TextField
+            value={localStoragePath}
+            onChange={(e) => onLocalStoragePathChange && onLocalStoragePathChange(e.target.value)}
+            placeholder="Type in location"
+            title={localStoragePath || ''}
+            style={{ width: '160px', minWidth: '160px' }}
+          />
+          <Button
+            icon={FolderSearch}
+            onClick={handleBrowseLocalStorage}
+            tooltip="Browse folder"
+            tooltipPosition="bottom"
+          />
+        </div>
       )
     },
     {

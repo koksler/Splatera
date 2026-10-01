@@ -383,7 +383,3 @@
 body.settings-open {
   overflow: hidden !important;
 }
-
-.settings-danger-btn svg {
-  color: var(--color-red) !important;
-}
